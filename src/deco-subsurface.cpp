@@ -122,7 +122,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             maximized = view->toplevel()->current().tiled_edges == wf::TILED_EDGES_ALL;
         }
 
-        theme.render_background(data, geometry, activated);
+        theme.render_background(data, geometry, activated, shows_shadow());
 
         /* Draw title & buttons */
         auto renderables = layout.get_renderable_areas();
@@ -219,9 +219,33 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         instances.push_back(std::make_unique<decoration_render_instance_t>(this, push_damage));
     }
 
+    /** Tiled, maximized and fullscreen windows have no shadow, as in GTK */
+    bool shows_shadow()
+    {
+        if (auto view = _view.lock())
+        {
+            const auto& state = view->toplevel()->current();
+            return !state.fullscreen && (state.tiled_edges == 0);
+        }
+
+        return false;
+    }
+
     wf::geometry_t get_bounding_box() override
     {
-        return wf::construct_box(get_offset(), size);
+        auto box = wf::construct_box(get_offset(), size);
+        if (shows_shadow())
+        {
+            /* The shadow is drawn outside the frame, and only what is inside
+             * the bounding box gets damaged and painted */
+            const auto ext = theme.get_shadow_extents();
+            box.x      -= ext.left;
+            box.y      -= ext.top;
+            box.width  += ext.left + ext.right;
+            box.height += ext.top + ext.bottom;
+        }
+
+        return box;
     }
 
     /** Make the title be drawn again, e.g. after the theme's colours changed */
@@ -402,9 +426,12 @@ wf::decoration_margins_t wf::simple_decorator_t::get_margins(const wf::toplevel_
 
 void wf::simple_decorator_t::reload_theme()
 {
+    /* The shadow, and with it the bounding box, may change size */
+    wf::scene::damage_node(deco, deco->get_bounding_box());
     deco->theme.reload_theme();
     deco->invalidate_title();
     /* Buttons keep the image they last drew until their state changes; lay
      * them out again so they all draw with the new theme */
     deco->resize(deco->size);
+    wf::scene::damage_node(deco, deco->get_bounding_box());
 }

@@ -43,6 +43,11 @@
 			<_long>How window buttons are drawn. "auto" uses the GTK theme's own buttons if it has them: its metacity-1 titlebutton images (for example WhiteSur), or buttons its Metacity XML builds from shared images (for example Orchis); otherwise they are drawn. "gtk" always draws them in the GTK style. "pixmap" prefers the theme's buttons and only draws as a fallback.</_long>
 			<default>auto</default>
 		</option>
+		<option name="shadow" type="bool">
+			<_short>Theme window shadow</_short>
+			<_long>Draw the GTK theme's window shadow (the box-shadow of its "decoration" style) around windows, as GTK does for its own windows. Tiled, maximized and fullscreen windows get none.</_long>
+			<default>true</default>
+		</option>
 		<!-- Fallback Colors (used if GTK theme cannot be loaded) -->
 		<option name="active_color" type="color">
 			<_short>Fallback color when window is active</_short>

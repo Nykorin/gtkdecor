@@ -3,6 +3,7 @@
 #include <wayfire/scene-render.hpp>
 #include "deco-button.hpp"
 #include "deco-metacity.hpp"
+#include "deco-css.hpp"
 #include <string>
 #include <memory>
 #include <map>
@@ -38,9 +39,23 @@ class decoration_theme_t
      * @param data The render data (pass, target, damage)
      * @param rectangle The rectangle to redraw.
      * @param active Whether to use active or inactive colors
+     * @param shadow Whether to draw the theme's window shadow around it
      */
     void render_background(const wf::scene::render_instruction_t& data,
-        wf::geometry_t rectangle, bool active) const;
+        wf::geometry_t rectangle, bool active, bool shadow = true) const;
+
+    /** How far the theme's window shadow reaches past each edge */
+    struct shadow_extents_t
+    {
+        int left = 0, right = 0, top = 0, bottom = 0;
+    };
+
+    /**
+     * @return The reach of the GTK theme's window shadow (the larger of its
+     *   focused and unfocused one), or all zero if it has none or shadows are
+     *   turned off.
+     */
+    shadow_extents_t get_shadow_extents() const;
 
     /**
      * Get corner radius for rounded titlebar
@@ -102,6 +117,8 @@ class decoration_theme_t
     /** auto: use the GTK theme's metacity-1 titlebuttons if it ships them,
      * otherwise draw them; gtk: always draw; pixmap: only use theme assets */
     wf::option_wrapper_t<std::string> button_style{"gtkdecor/button_style"};
+    /** Draw the GTK theme's window shadow (its "decoration" box-shadow) */
+    wf::option_wrapper_t<bool> theme_shadow{"gtkdecor/shadow"};
 
     // Rounded corner radii
     const int corner_radius = 12;        // Top corners
@@ -157,6 +174,21 @@ class decoration_theme_t
     /** Buttons drawn from the theme's Metacity XML; null if it has none we can draw */
     mutable std::unique_ptr<metacity_theme_t> metacity;
 
+    /** One layer of a CSS box-shadow */
+    struct css_shadow_t
+    {
+        double dx = 0, dy = 0, blur = 0, spread = 0;
+        wf::color_t color{0, 0, 0, 0};
+    };
+
+    /** The "decoration" and "decoration:backdrop" box-shadows, outer layers only */
+    mutable std::vector<css_shadow_t> shadow_active, shadow_inactive;
+    std::vector<css_shadow_t> parse_box_shadow(const std::string& value) const;
+    shadow_extents_t extents_of(const std::vector<css_shadow_t>& layers) const;
+    /** Render @layers around a w x h frame; the frame sits at (pad, pad) */
+    cairo_surface_t *render_shadow(const std::vector<css_shadow_t>& layers,
+        int width, int height, int pad) const;
+
     /** A window button's colours, as declared in the theme's stylesheet */
     struct titlebutton_colors_t
     {
@@ -178,7 +210,11 @@ class decoration_theme_t
     {
         wf::geometry_t geometry{};
         bool active = false;
+        bool shadow = false;
         bool valid = false;
+
+        std::unique_ptr<wf::owned_texture_t> shadow_tex;
+        wf::geometry_t shadow_rect{};
 
         std::unique_ptr<wf::owned_texture_t> titlebar_tex;
         wf::geometry_t titlebar_rect{};

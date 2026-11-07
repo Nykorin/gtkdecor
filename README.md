@@ -56,6 +56,9 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
   - Buttons the theme's Metacity XML builds from shared, recoloured images (Orchis style)
   - Falls back to drawing GTK-style buttons for themes without them
 
+- **Theme Window Shadow**: The shadow GTK draws around its own windows, from the theme's
+  `decoration` box-shadow, with a lighter one for unfocused windows
+
 - **Font Integration**: Automatically uses your GTK font settings
   - Reads `gtk-font-name` from `~/.config/gtk-3.0/settings.ini`
   - Font size scaled 1.12x to match native GTK titlebar size
@@ -98,6 +101,9 @@ button_style = auto
 # Titlebar and border sizes
 title_height = 28
 border_size = 4
+
+# Draw the GTK theme's window shadow around windows
+shadow = true
 
 # Fallback settings (only used if GTK theme can't be loaded)
 font = sans-serif

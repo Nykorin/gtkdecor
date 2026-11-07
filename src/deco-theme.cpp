@@ -8,6 +8,7 @@
 #include <vector>
 #include <sys/stat.h>
 #include <cmath>
+#include <set>
 
 #ifdef HAVE_LIBRSVG
 #include <librsvg/rsvg.h>
@@ -655,6 +656,40 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
 
     css_colors = color_vars;
 
+    /* GTK's own frame for a client-side decorated window: the nodes it is
+     * drawn with, styled by the theme's cascade */
+    css_sheet_t sheet;
+    sheet.parse(css_content);
+
+    const css_sheet_t::node_t decoration_node{"decoration", {}, {}};
+    auto frame_path = [] (bool backdrop, std::vector<css_sheet_t::node_t> nodes)
+    {
+        std::set<std::string> states;
+        if (backdrop)
+        {
+            states.insert("backdrop");
+        }
+
+        css_sheet_t::path_t path{{"window", {"background", "csd"}, states}};
+        for (auto& node : nodes)
+        {
+            node.states = states;
+            path.push_back(node);
+        }
+
+        return path;
+    };
+
+    /* The window shadow: the decoration node's box-shadow */
+    if (auto active_shadow = sheet.value(frame_path(false, {decoration_node}), "box-shadow"))
+    {
+        shadow_active = parse_box_shadow(*active_shadow);
+        auto backdrop = sheet.value(frame_path(true, {decoration_node}), "box-shadow");
+        shadow_inactive = backdrop ? parse_box_shadow(*backdrop) : shadow_active;
+        LOGI("Theme window shadow: ", shadow_active.size(), " layer(s) focused, ",
+            shadow_inactive.size(), " unfocused");
+    }
+
     // Try to find background color from @define-color theme_bg_color or theme_unfocused_bg_color
     if (color_vars.count("theme_bg_color"))
     {
@@ -890,6 +925,8 @@ void decoration_theme_t::reload_theme() const
     titlebutton_colors.clear();
     css_colors.clear();
     metacity.reset();
+    shadow_active.clear();
+    shadow_inactive.clear();
     theme_loaded = false;
     icon_theme_name.clear();
     gtk_theme_name.clear();
@@ -939,20 +976,31 @@ void decoration_theme_t::invalidate_cache() const
  * @param active Whether to use active or inactive colors
  */
 void decoration_theme_t::render_background(const wf::scene::render_instruction_t& data,
-    wf::geometry_t rectangle, bool active) const
+    wf::geometry_t rectangle, bool active, bool shadow) const
 {
     // Lazy initialization: load GTK theme on first render
     load_gtk_theme();
+
+    const auto& shadow_layers = active ? shadow_active : shadow_inactive;
+    const bool use_theme_shadow = theme_shadow && !shadow_active.empty();
+    shadow = shadow && use_theme_shadow && !shadow_layers.empty();
 
     // Check if cached surfaces are still valid
     bool cache_hit = bg_cache.valid &&
         bg_cache.geometry.width == rectangle.width &&
         bg_cache.geometry.height == rectangle.height &&
-        bg_cache.active == active;
+        bg_cache.active == active &&
+        bg_cache.shadow == shadow;
 
     if (cache_hit)
     {
         // Just re-submit cached textures
+        if (bg_cache.shadow_tex)
+        {
+            data.pass->add_texture(bg_cache.shadow_tex->get_texture(),
+                data.target, bg_cache.shadow_rect + wf::pointf_t{rectangle.x, rectangle.y}
+                    - wf::pointf_t{bg_cache.geometry.x, bg_cache.geometry.y}, data.damage);
+        }
         if (bg_cache.titlebar_tex)
         {
             data.pass->add_texture(bg_cache.titlebar_tex->get_texture(),
@@ -989,7 +1037,28 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     // Cache miss — regenerate all surfaces
     bg_cache.geometry = rectangle;
     bg_cache.active = active;
+    bg_cache.shadow = shadow;
     bg_cache.valid = true;
+    bg_cache.shadow_tex.reset();
+    bg_cache.outline_tex.reset();
+
+    /* The theme's window shadow, under everything else */
+    if (shadow)
+    {
+        const auto ext = extents_of(shadow_layers);
+        const int pad  = std::max({ext.left, ext.right, ext.top, ext.bottom});
+        if (auto surface = render_shadow(shadow_layers, rectangle.width, rectangle.height, pad))
+        {
+            bg_cache.shadow_rect = {
+                rectangle.x - pad, rectangle.y - pad,
+                rectangle.width + 2.0 * pad, rectangle.height + 2.0 * pad
+            };
+            bg_cache.shadow_tex = std::make_unique<wf::owned_texture_t>(surface);
+            data.pass->add_texture(bg_cache.shadow_tex->get_texture(), data.target,
+                bg_cache.shadow_rect, data.damage);
+            cairo_surface_destroy(surface);
+        }
+    }
 
     // Use theme colors if available, otherwise fall back to config colors
     wf::color_t bg_color = active ? theme_titlebar_bg_active : theme_titlebar_bg_inactive;
@@ -1043,7 +1112,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         };
 
         // Drop shadow
-        for (int i = shadow_blur; i > 0; i--)
+        for (int i = use_theme_shadow ? 0 : shadow_blur; i > 0; i--)
         {
             cairo_save(cr);
             cairo_new_sub_path(cr);
@@ -1092,7 +1161,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_paint(left_cr);
         cairo_set_operator(left_cr, CAIRO_OPERATOR_OVER);
 
-        for (int i = shadow_blur; i > 0; i--)
+        for (int i = use_theme_shadow ? 0 : shadow_blur; i > 0; i--)
         {
             double alpha = 0.1 * (1.0 - (double)i / shadow_blur);
             cairo_set_source_rgba(left_cr, 0, 0, 0, alpha);
@@ -1129,7 +1198,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_paint(right_cr);
         cairo_set_operator(right_cr, CAIRO_OPERATOR_OVER);
 
-        for (int i = shadow_blur; i > 0; i--)
+        for (int i = use_theme_shadow ? 0 : shadow_blur; i > 0; i--)
         {
             double alpha = 0.1 * (1.0 - (double)i / shadow_blur);
             cairo_set_source_rgba(right_cr, 0, 0, 0, alpha);
@@ -1170,7 +1239,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_set_operator(bottom_cr, CAIRO_OPERATOR_OVER);
 
         // Draw shadow along the bottom with rounded corners
-        for (int i = shadow_blur; i > 0; i--)
+        for (int i = use_theme_shadow ? 0 : shadow_blur; i > 0; i--)
         {
             double alpha = 0.1 * (1.0 - (double)i / shadow_blur);
             cairo_set_source_rgba(bottom_cr, 0, 0, 0, alpha);
@@ -1221,6 +1290,9 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     }
 
     // --- Unified outline: rounded top corners, rounded bottom corners ---
+    /* A theme shadow brings its own outline (GTK themes draw it as a 1px
+     * spread layer of the box-shadow) */
+    if (!use_theme_shadow)
     {
         auto outline_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
             rectangle.width, rectangle.height);
@@ -1730,6 +1802,77 @@ wf::color_t shade_color(wf::color_t c, double factor)
     return {channel(h + 120), channel(h), channel(h - 120), c.a};
 }
 
+/** In-place box blur of an A8 surface, three passes each way (about a Gaussian of @sigma) */
+void blur_alpha(cairo_surface_t *surface, double sigma)
+{
+    if (sigma <= 0.25)
+    {
+        return;
+    }
+
+    cairo_surface_flush(surface);
+    unsigned char *data = cairo_image_surface_get_data(surface);
+    const int width  = cairo_image_surface_get_width(surface);
+    const int height = cairo_image_surface_get_height(surface);
+    const int stride = cairo_image_surface_get_stride(surface);
+
+    /* Box sizes whose repeated application approximates the Gaussian */
+    const int passes = 3;
+    const double ideal = std::sqrt(12 * sigma * sigma / passes + 1);
+    int lower = std::floor(ideal);
+    if (lower % 2 == 0)
+    {
+        lower--;
+    }
+
+    const int upper = lower + 2;
+    const int lower_count = std::lround((12 * sigma * sigma - passes * lower * lower -
+        4 * passes * lower - 3 * passes) / (-4.0 * lower - 4));
+
+    std::vector<int> line(std::max(width, height));
+    auto blur_line = [&] (unsigned char *start, int length, int step, int radius)
+    {
+        for (int i = 0; i < length; i++)
+        {
+            line[i] = start[i * step];
+        }
+
+        int sum = 0;
+        for (int i = -radius; i <= radius; i++)
+        {
+            sum += (i >= 0 && i < length) ? line[i] : 0;
+        }
+
+        const int window = 2 * radius + 1;
+        for (int i = 0; i < length; i++)
+        {
+            start[i * step] = static_cast<unsigned char>((sum + window / 2) / window);
+            const int add = i + radius + 1, drop = i - radius;
+            sum += (add < length ? line[add] : 0) - (drop >= 0 ? line[drop] : 0);
+        }
+    };
+
+    for (int pass = 0; pass < passes; pass++)
+    {
+        const int radius = ((pass < lower_count ? lower : upper) - 1) / 2;
+        if (radius <= 0)
+        {
+            continue;
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            blur_line(data + y * stride, width, 1, radius);
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            blur_line(data + x, height, stride, radius);
+        }
+    }
+
+    cairo_surface_mark_dirty(surface);
+}
 }
 
 std::optional<wf::color_t> decoration_theme_t::lookup_css_color(const std::string& name, int depth) const
@@ -1830,5 +1973,224 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
     return {};
 }
 
+std::vector<decoration_theme_t::css_shadow_t> decoration_theme_t::parse_box_shadow(
+    const std::string& value) const
+{
+    std::vector<css_shadow_t> layers;
+    if (trim_ws(value) == "none")
+    {
+        return layers;
+    }
+
+    for (const auto& item : split_css(value, ','))
+    {
+        std::vector<double> lengths;
+        std::string color;
+        bool usable = true;
+        for (const auto& token : split_css(item, ' '))
+        {
+            if (token == "inset")
+            {
+                usable = false;  // inner shadows fall on the window, not around it
+                break;
+            }
+
+            const char c = token[0];
+            if (isdigit(static_cast<unsigned char>(c)) || (c == '-') || (c == '.'))
+            {
+                char *end = nullptr;
+                const double length = strtod(token.c_str(), &end);
+                const std::string unit = end;
+                if (!unit.empty() && (unit != "px"))
+                {
+                    usable = false;
+                    break;
+                }
+
+                lengths.push_back(length);
+            } else if (color.empty())
+            {
+                color = token;
+            } else
+            {
+                usable = false;
+                break;
+            }
+        }
+
+        if (!usable || (lengths.size() < 2) || (lengths.size() > 4) || color.empty())
+        {
+            continue;
+        }
+
+        auto resolved = resolve_css_value(color);
+        if (!resolved || (resolved->a <= 0))
+        {
+            continue;
+        }
+
+        css_shadow_t layer;
+        layer.dx     = lengths[0];
+        layer.dy     = lengths[1];
+        layer.blur   = lengths.size() > 2 ? std::max(0.0, lengths[2]) : 0;
+        layer.spread = lengths.size() > 3 ? lengths[3] : 0;
+        layer.color  = *resolved;
+        layers.push_back(layer);
+    }
+
+    return layers;
+}
+
+decoration_theme_t::shadow_extents_t decoration_theme_t::extents_of(
+    const std::vector<css_shadow_t>& layers) const
+{
+    shadow_extents_t ext;
+    for (const auto& layer : layers)
+    {
+        /* A CSS blur radius b is a Gaussian of sigma b/2, visible to about 3 sigma */
+        const double reach = std::ceil(1.5 * layer.blur) + layer.spread;
+        ext.left   = std::max(ext.left, (int)std::ceil(reach - layer.dx));
+        ext.right  = std::max(ext.right, (int)std::ceil(reach + layer.dx));
+        ext.top    = std::max(ext.top, (int)std::ceil(reach - layer.dy));
+        ext.bottom = std::max(ext.bottom, (int)std::ceil(reach + layer.dy));
+    }
+
+    return ext;
+}
+
+decoration_theme_t::shadow_extents_t decoration_theme_t::get_shadow_extents() const
+{
+    load_gtk_theme();
+    if (!theme_shadow || shadow_active.empty())
+    {
+        return {};
+    }
+
+    const auto a = extents_of(shadow_active), b = extents_of(shadow_inactive);
+    return {std::max(a.left, b.left), std::max(a.right, b.right),
+        std::max(a.top, b.top), std::max(a.bottom, b.bottom)};
+}
+
+/**
+ * Render the box-shadow @layers around a @width x @height frame, which sits
+ * at (@pad, @pad) in the result; the frame itself is left clear, as CSS
+ * clips an outer shadow to outside the box.
+ *
+ * Blurring a whole window-sized surface on every resize would be slow, so the
+ * shadow is rendered for a small frame (just big enough that its corners
+ * don't influence each other) and stretched: corners copied, the middle row
+ * and column repeated.
+ */
+cairo_surface_t*decoration_theme_t::render_shadow(const std::vector<css_shadow_t>& layers,
+    int width, int height, int pad) const
+{
+    if ((width <= 0) || (height <= 0))
+    {
+        return nullptr;
+    }
+
+    const double rt = corner_radius, rb = bottom_corner_radius;
+    auto frame_path = [&] (cairo_t *cr, double x, double y, double w, double h, double grow)
+    {
+        x -= grow;
+        y -= grow;
+        w += 2 * grow;
+        h += 2 * grow;
+        if ((w <= 0) || (h <= 0))
+        {
+            return;
+        }
+
+        const double limit = std::min(w, h) / 2;
+        const double t = std::clamp(rt + grow, 0.0, limit), b = std::clamp(rb + grow, 0.0, limit);
+        cairo_new_sub_path(cr);
+        cairo_arc(cr, x + t, y + t, t, M_PI, 3 * M_PI / 2);
+        cairo_arc(cr, x + w - t, y + t, t, -M_PI / 2, 0);
+        cairo_arc(cr, x + w - b, y + h - b, b, 0, M_PI / 2);
+        cairo_arc(cr, x + b, y + h - b, b, M_PI / 2, M_PI);
+        cairo_close_path(cr);
+    };
+
+    /* The small frame the shadow is actually rendered for */
+    const int core = 2 * (static_cast<int>(std::max(rt, rb)) + pad) + 1;
+    const int tw   = std::min(width, core), th = std::min(height, core);
+    const int TW   = tw + 2 * pad, TH = th + 2 * pad;
+
+    cairo_surface_t *tmpl = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, TW, TH);
+    cairo_t *cr = cairo_create(tmpl);
+
+    /* CSS paints the first shadow on top */
+    for (auto it = layers.rbegin(); it != layers.rend(); ++it)
+    {
+        cairo_surface_t *mask = cairo_image_surface_create(CAIRO_FORMAT_A8, TW, TH);
+        cairo_t *mask_cr = cairo_create(mask);
+        frame_path(mask_cr, pad + it->dx, pad + it->dy, tw, th, it->spread);
+        cairo_set_source_rgba(mask_cr, 1, 1, 1, 1);
+        cairo_fill(mask_cr);
+        cairo_destroy(mask_cr);
+
+        blur_alpha(mask, it->blur / 2);
+
+        cairo_set_source_rgba(cr, it->color.r, it->color.g, it->color.b, it->color.a);
+        cairo_mask_surface(cr, mask, 0, 0);
+        cairo_surface_destroy(mask);
+    }
+
+    cairo_destroy(cr);
+
+    cairo_surface_t *out = tmpl;
+    if ((tw != width) || (th != height))
+    {
+        const int FW = width + 2 * pad, FH = height + 2 * pad;
+        out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, FW, FH);
+        cairo_surface_flush(tmpl);
+        cairo_surface_flush(out);
+
+        const unsigned char *src = cairo_image_surface_get_data(tmpl);
+        unsigned char *dst = cairo_image_surface_get_data(out);
+        const int src_stride = cairo_image_surface_get_stride(tmpl);
+        const int dst_stride = cairo_image_surface_get_stride(out);
+
+        /* The template's middle column/row stands for everything between its corners */
+        const int cx = pad + tw / 2, cy = pad + th / 2;
+        auto map = [] (int f, int c, int F, int T)
+        {
+            if (f < c)
+            {
+                return f;
+            }
+
+            if (f >= F - (T - c - 1))
+            {
+                return f - (F - T);
+            }
+
+            return c;
+        };
+
+        for (int y = 0; y < FH; y++)
+        {
+            const uint32_t *src_row =
+                reinterpret_cast<const uint32_t*>(src + map(y, cy, FH, TH) * src_stride);
+            uint32_t *dst_row = reinterpret_cast<uint32_t*>(dst + y * dst_stride);
+            for (int x = 0; x < FW; x++)
+            {
+                dst_row[x] = src_row[map(x, cx, FW, TW)];
+            }
+        }
+
+        cairo_surface_mark_dirty(out);
+        cairo_surface_destroy(tmpl);
+    }
+
+    /* Clear the shadow under the (translucent) frame */
+    cr = cairo_create(out);
+    frame_path(cr, pad, pad, width, height, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_fill(cr);
+    cairo_destroy(cr);
+
+    return out;
+}
 }
 }

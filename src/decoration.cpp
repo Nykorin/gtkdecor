@@ -29,6 +29,7 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
     wf::option_wrapper_t<int> border_size{"gtkdecor/border_size"};
     wf::option_wrapper_t<std::string> button_order{"gtkdecor/button_order"};
     wf::option_wrapper_t<std::string> button_position{"gtkdecor/button_position"};
+    wf::option_wrapper_t<bool> shadow{"gtkdecor/shadow"};
 
     // GTK settings file monitoring
     int inotify_fd = -1;
@@ -211,6 +212,7 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
         border_size.set_callback(on_config_changed);
         button_order.set_callback(on_config_changed);
         button_position.set_callback(on_config_changed);
+        shadow.set_callback(on_config_changed);
 
         for (auto& view : wf::get_core().get_all_views())
         {
