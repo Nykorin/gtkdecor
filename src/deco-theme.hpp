@@ -39,10 +39,11 @@ class decoration_theme_t
      * @param data The render data (pass, target, damage)
      * @param rectangle The rectangle to redraw.
      * @param active Whether to use active or inactive colors
-     * @param shadow Whether to draw the theme's window shadow around it
+     * @param tiled Whether the window is tiled, maximized or fullscreen: square
+     *   corners and no shadow, as GTK draws such windows
      */
     void render_background(const wf::scene::render_instruction_t& data,
-        wf::geometry_t rectangle, bool active, bool shadow = true) const;
+        wf::geometry_t rectangle, bool active, bool tiled = false) const;
 
     /** How far the theme's window shadow reaches past each edge */
     struct shadow_extents_t
@@ -120,9 +121,9 @@ class decoration_theme_t
     /** Draw the GTK theme's window shadow (its "decoration" box-shadow) */
     wf::option_wrapper_t<bool> theme_shadow{"gtkdecor/shadow"};
 
-    // Rounded corner radii
-    const int corner_radius = 12;        // Top corners
-    const int bottom_corner_radius = 8;  // Bottom corners
+    // Rounded corner radii: the theme's "decoration" border-radius, else these
+    mutable int corner_radius = 12;        // Top corners
+    mutable int bottom_corner_radius = 8;  // Bottom corners
 
     // GTK theme parsing (mutable for lazy initialization)
     mutable bool theme_loaded;
@@ -211,6 +212,7 @@ class decoration_theme_t
         wf::geometry_t geometry{};
         bool active = false;
         bool shadow = false;
+        bool tiled  = false;
         bool valid = false;
 
         std::unique_ptr<wf::owned_texture_t> shadow_tex;

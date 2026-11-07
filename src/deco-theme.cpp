@@ -8,6 +8,7 @@
 #include <vector>
 #include <sys/stat.h>
 #include <cmath>
+#include <array>
 #include <set>
 
 #ifdef HAVE_LIBRSVG
@@ -662,6 +663,7 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     sheet.parse(css_content);
 
     const css_sheet_t::node_t decoration_node{"decoration", {}, {}};
+    const css_sheet_t::node_t headerbar_node{"headerbar", {"titlebar", "default-decoration"}, {}};
     auto frame_path = [] (bool backdrop, std::vector<css_sheet_t::node_t> nodes)
     {
         std::set<std::string> states;
@@ -680,6 +682,56 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         return path;
     };
 
+    /* Lengths in px ("8px", "0", "0 2px"); nothing if any is in another unit */
+    auto lengths = [&] (const css_sheet_t::path_t& path, const char *property)
+    {
+        std::vector<double> result;
+        auto value = sheet.value(path, property);
+        if (!value)
+        {
+            return result;
+        }
+
+        std::stringstream stream(*value);
+        std::string token;
+        while (stream >> token)
+        {
+            char *end = nullptr;
+            const double length = strtod(token.c_str(), &end);
+            const std::string unit = end;
+            if ((end == token.c_str()) || (!unit.empty() && (unit != "px")))
+            {
+                return std::vector<double>{};
+            }
+
+            result.push_back(length);
+        }
+
+        return result;
+    };
+
+    /* CSS box shorthand: top, right, bottom, left */
+    auto box = [] (const std::vector<double>& v) -> std::array<double, 4>
+    {
+        switch (v.size())
+        {
+          case 0:
+            return {0, 0, 0, 0};
+
+          case 1:
+            return {v[0], v[0], v[0], v[0]};
+
+          case 2:
+            return {v[0], v[1], v[0], v[1]};
+
+          case 3:
+            return {v[0], v[1], v[2], v[1]};
+
+          default:
+            return {v[0], v[1], v[2], v[3]};
+        }
+    };
+
     /* The window shadow: the decoration node's box-shadow */
     if (auto active_shadow = sheet.value(frame_path(false, {decoration_node}), "box-shadow"))
     {
@@ -688,6 +740,23 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         shadow_inactive = backdrop ? parse_box_shadow(*backdrop) : shadow_active;
         LOGI("Theme window shadow: ", shadow_active.size(), " layer(s) focused, ",
             shadow_inactive.size(), " unfocused");
+    }
+
+    /* Corners: the decoration's border-radius (top-left, top-right,
+     * bottom-right, bottom-left), else the header bar's for the top */
+    {
+        auto radius = lengths(frame_path(false, {decoration_node}), "border-radius");
+        if (!radius.empty())
+        {
+            const auto r = box(radius);  // same expansion order as the box shorthand
+            corner_radius = std::lround(r[0]);
+            bottom_corner_radius = std::lround(r[3]);
+        } else if (!(radius = lengths(frame_path(false, {headerbar_node}), "border-radius")).empty())
+        {
+            corner_radius = std::lround(box(radius)[0]);
+        }
+
+        LOGI("Theme corner radius: ", corner_radius, "px top, ", bottom_corner_radius, "px bottom");
     }
 
     // Try to find background color from @define-color theme_bg_color or theme_unfocused_bg_color
@@ -927,6 +996,8 @@ void decoration_theme_t::reload_theme() const
     metacity.reset();
     shadow_active.clear();
     shadow_inactive.clear();
+    corner_radius = 12;
+    bottom_corner_radius = 8;
     theme_loaded = false;
     icon_theme_name.clear();
     gtk_theme_name.clear();
@@ -976,21 +1047,26 @@ void decoration_theme_t::invalidate_cache() const
  * @param active Whether to use active or inactive colors
  */
 void decoration_theme_t::render_background(const wf::scene::render_instruction_t& data,
-    wf::geometry_t rectangle, bool active, bool shadow) const
+    wf::geometry_t rectangle, bool active, bool tiled) const
 {
     // Lazy initialization: load GTK theme on first render
     load_gtk_theme();
 
+    /* Tiled windows have square corners, as in GTK */
+    const int corner_radius = tiled ? 0 : this->corner_radius;
+    const int bottom_corner_radius = tiled ? 0 : this->bottom_corner_radius;
+
     const auto& shadow_layers = active ? shadow_active : shadow_inactive;
     const bool use_theme_shadow = theme_shadow && !shadow_active.empty();
-    shadow = shadow && use_theme_shadow && !shadow_layers.empty();
+    const bool shadow = !tiled && use_theme_shadow && !shadow_layers.empty();
 
     // Check if cached surfaces are still valid
     bool cache_hit = bg_cache.valid &&
         bg_cache.geometry.width == rectangle.width &&
         bg_cache.geometry.height == rectangle.height &&
         bg_cache.active == active &&
-        bg_cache.shadow == shadow;
+        bg_cache.shadow == shadow &&
+        bg_cache.tiled == tiled;
 
     if (cache_hit)
     {
@@ -1038,6 +1114,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     bg_cache.geometry = rectangle;
     bg_cache.active = active;
     bg_cache.shadow = shadow;
+    bg_cache.tiled = tiled;
     bg_cache.valid = true;
     bg_cache.shadow_tex.reset();
     bg_cache.outline_tex.reset();

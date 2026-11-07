@@ -122,7 +122,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             maximized = view->toplevel()->current().tiled_edges == wf::TILED_EDGES_ALL;
         }
 
-        theme.render_background(data, geometry, activated, shows_shadow());
+        theme.render_background(data, geometry, activated, !shows_shadow());
 
         /* Draw title & buttons */
         auto renderables = layout.get_renderable_areas();

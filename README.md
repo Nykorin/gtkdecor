@@ -42,8 +42,8 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 
 - **Automatic GTK3 Theme Integration**: Decorations automatically match your GTK theme
   - Titlebar colors from your GTK theme
+  - Rounded corners with the theme's radius, square when tiled or maximized
   - Window borders with proper styling
-  - Rounded corners (12px top, 8px bottom)
 
 - **Icon Theme Support**: Window control buttons use icons from your icon theme
   - Icons are properly recolored to match theme foreground colors
@@ -189,7 +189,7 @@ result rather than a bug.
    - Loads icon theme path
 
 2. **Rendering**: For each window:
-   - Titlebar with rounded top corners, bottom corners with subtle rounding
+   - Titlebar and frame with the theme's corner radius (square when tiled)
    - Drop shadows on all edges
    - Unified 1px contrast outline around the full decoration
    - Window control buttons with icon theme icons
