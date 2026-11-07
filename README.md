@@ -63,7 +63,7 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 
 - **Font Integration**: Automatically uses your GTK font settings
   - Reads `gtk-font-name` from `~/.config/gtk-3.0/settings.ini`
-  - Font size scaled 1.12x to match native GTK titlebar size
+  - Bold, at the font's own size, as GTK draws window titles
   - Centered title text with proper spacing around buttons
   - Long titles truncated with ellipsis to prevent overflow
 
@@ -198,7 +198,7 @@ result rather than a bug.
    - Unified 1px contrast outline around the full decoration
    - Window control buttons with icon theme icons
    - Recolored SVG icons to match theme foreground
-   - Title text centered with GTK font (scaled 1.12x for proper size)
+   - Title text centered with the GTK font, bold, at its own size
    - Long titles automatically truncated with ellipsis
    - Background surfaces cached and reused across frames (only regenerated on resize or focus change)
 

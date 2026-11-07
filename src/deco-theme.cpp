@@ -1573,7 +1573,7 @@ cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
     PangoFontDescription *font_desc;
     PangoLayout *layout;
 
-    // Use GTK font with scaling to match native GTK titlebar size
+    // The GTK font, bold, as GTK draws window titles (.titlebar .title)
     std::string gtk_font_now = get_gtk_font_name();
     std::string font_to_use;
 
@@ -1586,10 +1586,8 @@ cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
             std::string font_family = gtk_font_now.substr(0, last_space);
             std::string font_size_str = gtk_font_now.substr(last_space + 1);
             try {
-                int base_size = std::stoi(font_size_str);
-                // Scale font size to match native GTK titlebar (typically 1.3-1.4x larger)
-                int scaled_size = static_cast<int>(base_size * 1.12);
-                font_to_use = font_family + " Bold " + std::to_string(scaled_size);
+                int size = std::stoi(font_size_str);
+                font_to_use = font_family + " Bold " + std::to_string(size);
             } catch (...) {
                 font_to_use = gtk_font_now;  // Use as-is if parsing fails
             }
