@@ -43,6 +43,7 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 - **Automatic GTK3 Theme Integration**: Decorations automatically match your GTK theme
   - Titlebar colors from the theme's header bar, focused and unfocused
   - Title text colors, focused and unfocused
+  - Titlebar height and button sizes from the theme's header bar and title buttons
   - Rounded corners with the theme's radius, square when tiled or maximized
   - Window borders with proper styling
 
@@ -99,8 +100,10 @@ button_position = right
 #   pixmap - prefer the theme's images, draw only as a fallback
 button_style = auto
 
-# Titlebar and border sizes
-title_height = 28
+# Titlebar and border sizes. title_height = -1 follows the GTK theme: as
+# tall as its header bar, with buttons the size of its title buttons
+# (any other value: that height, and buttons 64% of it; 0 hides the titlebar)
+title_height = -1
 border_size = 4
 
 # Draw the GTK theme's window shadow around windows

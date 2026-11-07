@@ -142,12 +142,17 @@ class decoration_layout_t
 
 
   private:
-    const int titlebar_size;
-    const int border_size;
-    const int button_width;
-    const int button_height;
-    const int button_padding;
+    int titlebar_size;
+    int border_size;
+    int button_width;
+    int button_height;
+    int button_padding;
+    int button_spacing;
+    int button_edge;
     const decoration_theme_t& theme;
+
+    /** Read the sizes from the theme again (it may have been reloaded) */
+    void update_sizes();
 
     std::function<void(wf::geometry_t)> damage_callback;
 

@@ -22,6 +22,7 @@
 #include "deco-layout.hpp"
 #include "deco-theme.hpp"
 #include <wayfire/window-manager.hpp>
+#include <wayfire/txn/transaction-manager.hpp>
 
 #include <wayfire/plugins/common/cairo-util.hpp>
 
@@ -436,6 +437,11 @@ void wf::simple_decorator_t::reload_theme()
     deco->invalidate_title();
     /* Buttons keep the image they last drew until their state changes; lay
      * them out again so they all draw with the new theme */
+    deco->update_decoration_size();
     deco->resize(deco->size);
     wf::scene::damage_node(deco, deco->get_bounding_box());
+
+    /* The title bar may have changed height: give the window its new margins */
+    view->toplevel()->pending().margins = get_margins(view->toplevel()->pending());
+    wf::get_core().tx_manager->schedule_object(view->toplevel());
 }

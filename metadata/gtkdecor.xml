@@ -16,10 +16,10 @@
 		</option>
 		<option name="title_height" type="int">
 			<_short>Title bar height</_short>
-			<_long>Sets the height of the title bars in pixels.</_long>
-			<default>28</default>
+			<_long>Sets the height of the title bars in pixels, not counting the border. -1 (the default) follows the GTK theme: as tall as its header bar, with buttons the size of its title buttons. 0 hides the title bar.</_long>
+			<default>-1</default>
 			<max>100</max>
-			<min>0</min>
+			<min>-1</min>
 		</option>
 		<option name="border_size" type="int">
 			<_short>Border size</_short>

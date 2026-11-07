@@ -6,9 +6,6 @@
 #include <wayfire/util.hpp>
 #include <sstream>
 
-#define BUTTON_HEIGHT_PC 0.64
-#define BUTTON_HORIZONTAL_SPACING 5
-#define BUTTON_EDGE_MARGIN 8
 
 namespace wf
 {
@@ -59,19 +56,24 @@ decoration_area_type_t decoration_area_t::get_type() const
 decoration_layout_t::decoration_layout_t(const decoration_theme_t& th,
     std::function<void(wf::geometry_t)> callback) :
 
-    titlebar_size(th.get_title_height()),
-    border_size(th.get_border_size()),
-    /**
-     * This is necessary. Otherwise, we will draw an
-     * overly huge button. 70% of the titlebar height
-     * is a decent size. (Equals 21 px by default)
-     */
-    button_width(titlebar_size * BUTTON_HEIGHT_PC),
-    button_height(titlebar_size * BUTTON_HEIGHT_PC),
-    button_padding((titlebar_size - button_height) / 2),
     theme(th),
     damage_callback(callback)
-{}
+{
+    update_sizes();
+}
+
+void decoration_layout_t::update_sizes()
+{
+    titlebar_size  = theme.get_title_height();
+    border_size    = theme.get_border_size();
+    button_width   = theme.get_button_size();
+    button_height  = button_width;
+    button_spacing = theme.get_button_spacing();
+    button_edge    = theme.get_button_edge();
+    /* Centred in the whole bar, border included, as GTK centres them in its
+     * header bar */
+    button_padding = (titlebar_size + border_size - button_height) / 2;
+}
 
 wf::geometry_t decoration_layout_t::create_buttons(int width, int)
 {
@@ -96,22 +98,22 @@ wf::geometry_t decoration_layout_t::create_buttons(int width, int)
         }
     }
 
-    int per_button = BUTTON_HORIZONTAL_SPACING + button_width;
-    int total_width = BUTTON_EDGE_MARGIN + buttons.size() * per_button;
-    cached_button_area_width = border_size + total_width;
+    int per_button = button_spacing + button_width;
+    int buttons_span = buttons.empty() ? 0 :
+        buttons.size() * per_button - button_spacing;
+    /* Space taken from the titlebar edge, mirrored on the other side so the
+     * title stays centred */
+    cached_button_area_width = button_edge + buttons_span;
 
     /* The buttons are always placed left to right in the configured order;
-     * only the edge they hug changes. */
+     * only the edge they hug changes. button_edge is measured from the
+     * window's outer edge, border included. */
     bool on_right = ((std::string)button_position != "left");
-    int buttons_span = buttons.empty() ? 0 :
-        buttons.size() * per_button - BUTTON_HORIZONTAL_SPACING;
-    int first_x = on_right ?
-        width - border_size - BUTTON_EDGE_MARGIN - buttons_span :
-        border_size + BUTTON_EDGE_MARGIN;
+    int first_x   = on_right ? width - button_edge - buttons_span : button_edge;
 
     wf::geometry_t button_geometry = {
         (double)first_x,
-        (double)(button_padding + border_size),
+        (double)button_padding,
         (double)button_width,
         (double)button_height,
     };
@@ -126,11 +128,9 @@ wf::geometry_t decoration_layout_t::create_buttons(int width, int)
     }
 
     /* Area around the buttons that still allows moving the window */
-    int area_x = on_right ? width - border_size - total_width :
-        border_size + BUTTON_EDGE_MARGIN;
     return {
-        (double)area_x, (double)border_size,
-        (double)total_width, (double)titlebar_size
+        (double)(on_right ? first_x : border_size), (double)border_size,
+        (double)(buttons_span + button_edge - border_size), (double)titlebar_size
     };
 }
 
@@ -138,16 +138,18 @@ wf::geometry_t decoration_layout_t::create_buttons(int width, int)
 void decoration_layout_t::resize(int width, int height)
 {
     this->layout_areas.clear();
+    update_sizes();
     if (this->titlebar_size > 0)
     {
         auto button_geometry_expanded = create_buttons(width, height);
 
-        /* Title spans the full titlebar width (text padding handled in render_text) */
+        /* Title spans the full titlebar width (text padding handled in
+         * render_text), and is centred in the whole bar like the buttons */
         wf::geometry_t title_geometry = {
             (double)border_size,
-            (double)border_size,
+            0.0,
             (double)(width - 2 * border_size),
-            (double)titlebar_size,
+            (double)(titlebar_size + border_size),
         };
         this->layout_areas.push_back(std::make_unique<decoration_area_t>(
             DECORATION_AREA_TITLE, title_geometry));

@@ -25,8 +25,16 @@ class decoration_theme_t
     decoration_theme_t();
     ~decoration_theme_t();
 
-    /** @return The available height for displaying the title */
+    /** @return The available height for displaying the title (title_height,
+     *   or with title_height = -1 the GTK theme's header bar height, less the
+     *   border) */
     int get_title_height() const;
+    /** @return The size of a window button, in logical pixels */
+    int get_button_size() const;
+    /** @return The gap between two window buttons */
+    int get_button_spacing() const;
+    /** @return The gap between the window's edge and the outermost button */
+    int get_button_edge() const;
     /** @return The available border for resizing */
     int get_border_size() const;
     /** Set the flags for buttons */
@@ -124,6 +132,12 @@ class decoration_theme_t
     // Rounded corner radii: the theme's "decoration" border-radius, else these
     mutable int corner_radius = 12;        // Top corners
     mutable int bottom_corner_radius = 8;  // Bottom corners
+
+    /* Sizes from the theme's header bar and title buttons (0/-1: none given) */
+    mutable int theme_title_total    = 0;
+    mutable int theme_button_size    = 0;
+    mutable int theme_button_spacing = -1;
+    mutable int theme_button_edge    = -1;
 
     // GTK theme parsing (mutable for lazy initialization)
     mutable bool theme_loaded;

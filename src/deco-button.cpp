@@ -105,8 +105,8 @@ void button_t::update_texture()
      * This prevents blurriness when rendered on screen
      */
     decoration_theme_t::button_state_t state = {
-        .width  = 2.0 * 0.64 * theme.get_title_height(),
-        .height = 2.0 * 0.64 * theme.get_title_height(),
+        .width  = 2.0 * theme.get_button_size(),
+        .height = 2.0 * theme.get_button_size(),
         .border = 2.0,
         .hover_progress = hover,
         .activated = is_activated,

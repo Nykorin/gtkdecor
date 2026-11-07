@@ -665,6 +665,7 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     const css_sheet_t::node_t decoration_node{"decoration", {}, {}};
     const css_sheet_t::node_t headerbar_node{"headerbar", {"titlebar", "default-decoration"}, {}};
     const css_sheet_t::node_t title_node{"label", {"title"}, {}};
+    const css_sheet_t::node_t button_node{"button", {"titlebutton", "close"}, {}};
     auto frame_path = [] (bool backdrop, std::vector<css_sheet_t::node_t> nodes)
     {
         std::set<std::string> states;
@@ -758,6 +759,40 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         }
 
         LOGI("Theme corner radius: ", corner_radius, "px top, ", bottom_corner_radius, "px bottom");
+    }
+
+    /* Sizes: the header bar is at least min-height and as tall as its
+     * buttons, plus its padding; buttons are at least min-width x min-height
+     * and fit a 16px icon plus their padding */
+    {
+        const auto bar    = frame_path(false, {headerbar_node});
+        const auto button = frame_path(false, {headerbar_node, button_node});
+        auto first = [] (const std::vector<double>& v) { return v.empty() ? 0.0 : v[0]; };
+
+        const double bar_min  = first(lengths(bar, "min-height"));
+        const auto bar_pad    = box(lengths(bar, "padding"));
+        const double min_w    = first(lengths(button, "min-width"));
+        const double min_h    = first(lengths(button, "min-height"));
+        const auto button_pad = box(lengths(button, "padding"));
+        const auto margin     = box(lengths(button, "margin"));
+
+        if ((min_w > 0) || (min_h > 0))
+        {
+            const double w = std::max(min_w, 16 + button_pad[1] + button_pad[3]);
+            const double h = std::max(min_h, 16 + button_pad[0] + button_pad[2]);
+            theme_button_size    = std::lround(std::max(w, h));
+            theme_button_spacing = std::lround(margin[1] + margin[3]);
+            theme_button_edge    = std::lround(std::max(bar_pad[1], bar_pad[3]) + margin[3]);
+        }
+
+        if ((bar_min > 0) || (theme_button_size > 0))
+        {
+            theme_title_total = std::lround(std::max(bar_min,
+                theme_button_size + margin[0] + margin[2]) + bar_pad[0] + bar_pad[2]);
+        }
+
+        LOGI("Theme header bar: ", theme_title_total, "px tall, buttons ", theme_button_size,
+            "px, ", theme_button_spacing, "px apart, ", theme_button_edge, "px from the edge");
     }
 
     // Try to find background color from @define-color theme_bg_color or theme_unfocused_bg_color
@@ -1052,6 +1087,10 @@ void decoration_theme_t::reload_theme() const
     shadow_inactive.clear();
     corner_radius = 12;
     bottom_corner_radius = 8;
+    theme_title_total    = 0;
+    theme_button_size    = 0;
+    theme_button_spacing = -1;
+    theme_button_edge    = -1;
     theme_loaded = false;
     icon_theme_name.clear();
     gtk_theme_name.clear();
@@ -1067,7 +1106,43 @@ void decoration_theme_t::reload_theme() const
 /** @return The available height for displaying the title */
 int decoration_theme_t::get_title_height() const
 {
-    return title_height;
+    if (title_height >= 0)
+    {
+        return title_height;
+    }
+
+    /* -1: as tall as the theme's header bar (our border is part of the bar) */
+    load_gtk_theme();
+    if (theme_title_total > 0)
+    {
+        return std::max(0, theme_title_total - (int)border_size);
+    }
+
+    return 28;
+}
+
+int decoration_theme_t::get_button_size() const
+{
+    const int title = get_title_height();
+    if ((title_height < 0) && (theme_button_size > 0))
+    {
+        return std::min(theme_button_size, title + (int)border_size);
+    }
+
+    return title * 0.64;
+}
+
+int decoration_theme_t::get_button_spacing() const
+{
+    get_title_height();  // loads the theme
+    return (title_height < 0) && (theme_button_size > 0) ? theme_button_spacing : 5;
+}
+
+int decoration_theme_t::get_button_edge() const
+{
+    get_title_height();
+    return (title_height < 0) && (theme_button_size > 0) ?
+           std::max(theme_button_edge, 0) : (int)border_size + 8;
 }
 
 /** @return The available border for resizing */
@@ -1208,7 +1283,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     outline_color.a = 0.10;  // Subtle semi-transparent white border
 
     // Calculate titlebar area (top portion with rounded corners)
-    int titlebar_h = title_height + border_size;
+    int titlebar_h = get_title_height() + border_size;
     wf::geometry_t titlebar_rect = {
         rectangle.x, rectangle.y,
         rectangle.width, (double)titlebar_h
@@ -1752,7 +1827,8 @@ cairo_surface_t*decoration_theme_t::get_button_surface(button_type_t button,
                 cairo_t *icon_cr = cairo_create(icon_surface);
 
                 // Render SVG with padding inside the button circle
-                double icon_size = state.width * 0.85;  // Match GTK size with visible padding
+                /* GTK's titlebutton icon is 16px; on small buttons, shrink it to fit */
+                double icon_size = std::min(state.width * 0.85, 16.0 * state.scale);
                 double offset = (state.width - icon_size) / 2.0;
                 RsvgRectangle viewport = {
                     .x = offset,
