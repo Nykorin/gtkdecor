@@ -4,6 +4,11 @@ A  [Wayfire](https://github.com/WayfireWM/wayfire) plugin that provides **server
 
 A project by Kreuder. Based on Wayfire's built-in [`decoration`](https://github.com/WayfireWM/wayfire/tree/master/plugins/decor) plugin by Iliya Bozhinov, which it extends with GTK3 theming and replaces.
 
+This is the `gtk-theme-integration` branch of a [fork](https://github.com/Nykorin/gtkdecor)
+of [mkay/gtkdecor](https://github.com/mkay/gtkdecor). It draws more of the frame the way
+GTK draws its own windows: the theme's window shadow, corner radius, header bar colors and
+sizes, and the buttons themes build in their Metacity XML. Buttons sit on the right by default.
+
 ![The same window decorated under four different GTK themes](assets/screenshot.png)
 
 The same Chromium window, decorated four times. From back to front: **Tokyonight**,
@@ -16,11 +21,16 @@ is identical in all four.
 ## Installation
 
 Requires **Wayfire 0.11 or newer**. Wayfire's own plugin manager builds and installs
-`gtkdecor` into your user prefix in one step:
+`gtkdecor` into your user prefix. Given a URL it always clones the repository's default
+branch, so install this branch from a checkout of it instead:
 
 ```bash
-wayfire-plugin install https://github.com/mkay/gtkdecor
+git clone -b gtk-theme-integration https://github.com/Nykorin/gtkdecor
+wayfire-plugin install ./gtkdecor
 ```
+
+The plugin manager builds the checkout as it is, whatever branch it has checked out, and
+leaves it untouched (the build happens under `~/.local/share/wayfire/plugin-manager/`).
 
 Then enable it in `~/.config/wayfire.ini`, and remove the built-in `decoration` plugin
 from the same list — running both at once decorates every window twice:
@@ -34,9 +44,16 @@ Restart Wayfire and you are done. The defaults follow your GTK theme, so nothing
 further is required; see [Configuration](#configuration) to change the button order,
 sizes or fallback colors.
 
-Later on, `wayfire-plugin update` picks up new releases and `wayfire-plugin rebuild`
-recompiles against an upgraded Wayfire. To build and install by hand instead, see
-[Development](#development).
+Later on, pull the branch and let the plugin manager rebuild it when the commit has
+changed; `wayfire-plugin rebuild` recompiles regardless, e.g. against an upgraded Wayfire
+or after local edits:
+
+```bash
+git -C gtkdecor pull
+wayfire-plugin update gtkdecor
+```
+
+To build by hand instead, see [Development](#development).
 
 ## Features
 
@@ -55,7 +72,7 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 - **Themed Window Buttons**: Uses your GTK theme's own button images when it ships them
   - macOS-style traffic lights from themes like WhiteSur, MacTahoe and Nordic
   - Separate images for hover, pressed and unfocused states
-  - Buttons the theme's Metacity XML builds from shared, recoloured images (Orchis style)
+  - Buttons the theme's Metacity XML builds from shared, recolored images (Orchis style)
   - Falls back to drawing GTK-style buttons for themes without them
 
 - **Theme Window Shadow**: The shadow GTK draws around its own windows, from the theme's
@@ -74,9 +91,11 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
   - No Wayfire restart required!
 
 - **Configurable**:
-  - Button order (left-to-right)
-  - Titlebar height
+  - Button order (left-to-right) and which end of the titlebar they sit at
+  - Titlebar height, following the theme by default
   - Border size
+  - The theme's window shadow, on or off
+  - Which windows get decorations, by window rule criteria
   - Fallback colors and fonts
 
 ## Configuration
@@ -115,10 +134,29 @@ font_color = #ffffffff
 active_color = #222222aa
 inactive_color = #333333dd
 
-# View matching
+# View matching (Wayfire window rule criteria, e.g. app_id is "mpv")
 ignore_views = none
 forced_views = none
 ```
+
+### Which windows get decorated
+
+Wayfire decides per window whether the client or the compositor draws the frame, and
+`gtkdecor` decorates the ones the compositor draws. With
+`preferred_decoration_mode = client` in `[core]`, apps draw their own frames, but any app
+that asks for server-side decorations through `xdg-decoration` still gets one from
+`gtkdecor`: terminals such as Alacritty and players such as mpv do. That makes client
+mode a good default, with `gtkdecor` as the fallback for apps that don't draw a frame.
+Wayfire's `window-rules` plugin cannot change a window's decoration mode; use these two
+options instead:
+
+- `ignore_views` removes the frame from matching windows, for an app that asks for
+  server-side decorations when you would rather it had none.
+- `forced_views` decorates matching windows even if they did not ask. Use it only for
+  apps that draw no frame of their own: GTK and libadwaita apps always draw theirs, so
+  forcing one gives it two frames, offset from each other.
+
+Criteria can be combined, e.g. `forced_views = app_id is "mpv" | app_id is "imv"`.
 
 ## Window Button Images
 
@@ -188,24 +226,28 @@ result rather than a bug.
 1. **Theme Loading**: On first render, the plugin:
    - Reads your GTK settings from `~/.config/gtk-3.0/settings.ini`
    - Extracts font family, weight, and size (e.g., "Source Sans 3 Semi-Bold 11")
-   - Loads the GTK theme CSS file for colors
+   - Loads the GTK theme CSS file, and asks its cascade how GTK styles its own window
+     frame: the `decoration`, header bar, title and title button nodes, so later and more
+     specific rules win as they do in GTK
+   - Reads the theme's Metacity XML for buttons built from shared images
    - Font from settings.ini takes priority over CSS to ensure consistent rendering
    - Loads icon theme path
 
 2. **Rendering**: For each window:
    - Titlebar and frame with the theme's corner radius (square when tiled)
-   - Drop shadows on all edges
-   - Unified 1px contrast outline around the full decoration
+   - The theme's window shadow, blurred as its CSS specifies (none when tiled)
+   - Without a theme shadow, a faint built-in one and a 1px contrast outline
    - Window control buttons with icon theme icons
    - Recolored SVG icons to match theme foreground
    - Title text centered with the GTK font, bold, at its own size
    - Long titles automatically truncated with ellipsis
    - Background surfaces cached and reused across frames (only regenerated on resize or focus change)
 
-3. **Live Updates**: Uses inotify to monitor GTK settings file
-   - Detects changes to `settings.ini`
-   - Automatically reloads all decoration themes
-   - Damages windows to trigger re-render
+3. **Live Updates**: Uses inotify to watch `~/.config/gtk-3.0`
+   - Detects `settings.ini` being written, or replaced by a new file as most settings
+     tools save it
+   - Reloads all decoration themes and redraws titles and buttons
+   - Gives windows new margins if the titlebar height changed
 
 ## Comparison with Original `decoration` Plugin
 
@@ -214,9 +256,10 @@ The original `decoration` plugin provides simple static decorations. `gtkdecor` 
 - ✅ Native GTK theme integration (colors, fonts)
 - ✅ Icon theme support for buttons
 - ✅ Themed window buttons, including macOS-style traffic lights
+- ✅ The theme's window shadow
 - ✅ Live theme reloading
 - ✅ Better visual match with GTK applications
-- ✅ Rounded corners
+- ✅ Rounded corners, with the theme's radius
 - ✅ Proper icon recoloring
 
 ## Development
@@ -230,9 +273,13 @@ ninja -C builddir
 
 ### Installing
 
+From the checkout, through Wayfire's plugin manager (into your user prefix):
+
 ```bash
-sudo ninja -C builddir install
+wayfire-plugin install .
 ```
+
+`sudo ninja -C builddir install` installs system-wide instead.
 
 ### File Structure
 
@@ -242,12 +289,14 @@ sudo ninja -C builddir install
 - `src/deco-subsurface.cpp/hpp` - Scene graph integration
 - `src/deco-button.cpp/hpp` - Button rendering and state management
 - `src/deco-metacity.cpp/hpp` - Buttons from a theme's Metacity XML
+- `src/deco-css.cpp/hpp` - The part of GTK's CSS cascade used to style the frame
 - `metadata/gtkdecor.xml` - Plugin metadata for Wayfire
 - `icons/plugin-gtkdecor.svg` - Plugin icon for WCM
 
 ## Credits
 
 Based on the original Wayfire `decoration` plugin, extended with GTK3 theme integration.
+The `gtk-theme-integration` branch is by Nykorin, on top of mkay's gtkdecor.
 
 ## License
 
