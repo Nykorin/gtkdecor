@@ -69,6 +69,12 @@ class button_t
      */
     void set_activated(bool is_activated);
 
+    /** Set whether the parent window is maximized (themes draw "unmaximize" then) */
+    void set_maximized(bool is_maximized);
+
+    /** Set which end of the titlebar the button group is at, and this button's place in it */
+    void set_position(bool on_right, int index, int count);
+
     /**
      * Render the button on the given framebuffer at the given coordinates.
      * Precondition: set_button_type() has been called, otherwise result is no-op
@@ -91,6 +97,12 @@ class button_t
     bool is_pressed = false;
     /* Whether the parent window is active/focused */
     bool is_activated = true;
+    /* Whether the parent window is maximized */
+    bool is_maximized = false;
+    /* Place in the button group */
+    bool on_right = true;
+    int index     = 0;
+    int count     = 1;
     /* The shade of button background to use. */
     wf::animation::simple_animation_t hover{wf::create_option(100)};
 

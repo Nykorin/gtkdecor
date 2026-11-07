@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 #include <sys/stat.h>
+#include <cmath>
 
 #ifdef HAVE_LIBRSVG
 #include <librsvg/rsvg.h>
@@ -652,6 +653,8 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         searchStart = match.suffix().first;
     }
 
+    css_colors = color_vars;
+
     // Try to find background color from @define-color theme_bg_color or theme_unfocused_bg_color
     if (color_vars.count("theme_bg_color"))
     {
@@ -821,6 +824,18 @@ void decoration_theme_t::load_gtk_theme() const
     // Parse the CSS file
     parse_theme_css(css_file);
 
+    /* <theme>/gtk-3.0/gtk.css -> <theme> */
+    const std::string theme_dir = css_file.substr(0,
+        css_file.rfind('/', css_file.rfind('/') - 1));
+    metacity = std::make_unique<metacity_theme_t>();
+    if (metacity->load(theme_dir, [this] (const std::string& name) { return lookup_css_color(name); }))
+    {
+        LOGI("Drawing window buttons from the theme's Metacity XML");
+    } else
+    {
+        metacity.reset();
+    }
+
     // Restore GTK font if it was found (prioritize settings.ini over CSS)
     if (gtk_font_found)
     {
@@ -873,6 +888,8 @@ void decoration_theme_t::reload_theme() const
     invalidate_cache();
     clear_titlebutton_cache();
     titlebutton_colors.clear();
+    css_colors.clear();
+    metacity.reset();
     theme_loaded = false;
     icon_theme_name.clear();
     gtk_theme_name.clear();
@@ -1374,6 +1391,47 @@ cairo_surface_t*decoration_theme_t::get_button_surface(button_type_t button,
                 return out;
             }
         }
+
+        /* Buttons the theme builds from shared images in its Metacity XML */
+        if (metacity)
+        {
+            metacity_theme_t::request_t request;
+            switch (button)
+            {
+              case BUTTON_CLOSE:
+                request.function = "close";
+                break;
+
+              case BUTTON_TOGGLE_MAXIMIZE:
+                request.function = "maximize";
+                break;
+
+              case BUTTON_MINIMIZE:
+                request.function = "minimize";
+                break;
+            }
+
+            request.focused   = state.activated;
+            request.maximized = state.maximized;
+            request.state     = state.hover_progress < 0 ? "pressed" :
+                (state.hover_progress > 0 ? "prelight" : "normal");
+            request.on_right = state.on_right;
+            request.index    = state.index;
+            request.count    = state.count;
+            request.size     = static_cast<int>(state.width);
+            request.scale    = state.scale;
+
+            if (cairo_surface_t *src = metacity->get_button(request))
+            {
+                cairo_surface_t *out = cairo_image_surface_create(
+                    CAIRO_FORMAT_ARGB32, state.width, state.height);
+                cairo_t *out_cr = cairo_create(out);
+                cairo_set_source_surface(out_cr, src, 0, 0);
+                cairo_paint(out_cr);
+                cairo_destroy(out_cr);
+                return out;
+            }
+        }
     }
 
     cairo_surface_t *button_surface = cairo_image_surface_create(
@@ -1567,5 +1625,210 @@ cairo_surface_t*decoration_theme_t::get_button_surface(button_type_t button,
     cairo_destroy(cr);
     return button_surface;
 }
+
+namespace
+{
+std::string trim_ws(const std::string& s)
+{
+    const auto begin = s.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos)
+    {
+        return "";
+    }
+
+    return s.substr(begin, s.find_last_not_of(" \t\r\n") - begin + 1);
+}
+
+/** Split @s at @sep (or at whitespace if @sep is ' '), except inside parentheses */
+std::vector<std::string> split_css(const std::string& s, char sep)
+{
+    std::vector<std::string> parts;
+    std::string current;
+    int depth = 0;
+    for (char c : s)
+    {
+        depth += (c == '(') - (c == ')');
+        const bool split = depth == 0 && (sep == ' ' ? isspace(static_cast<unsigned char>(c)) : c == sep);
+        if (split)
+        {
+            if (!trim_ws(current).empty() || (sep != ' '))
+            {
+                parts.push_back(trim_ws(current));
+            }
+
+            current.clear();
+        } else
+        {
+            current += c;
+        }
+    }
+
+    if (!trim_ws(current).empty() || (sep != ' '))
+    {
+        parts.push_back(trim_ws(current));
+    }
+
+    return parts;
+}
+
+/** GTK's shade(): scale lightness and saturation in HLS space */
+wf::color_t shade_color(wf::color_t c, double factor)
+{
+    const double max = std::max({c.r, c.g, c.b}), min = std::min({c.r, c.g, c.b});
+    double h = 0, s = 0, l = (max + min) / 2;
+    if (max != min)
+    {
+        const double d = max - min;
+        s = l <= 0.5 ? d / (max + min) : d / (2 - max - min);
+        if (max == c.r)
+        {
+            h = (c.g - c.b) / d;
+        } else if (max == c.g)
+        {
+            h = 2 + (c.b - c.r) / d;
+        } else
+        {
+            h = 4 + (c.r - c.g) / d;
+        }
+
+        h *= 60;
+        if (h < 0)
+        {
+            h += 360;
+        }
+    }
+
+    l = std::clamp(l * factor, 0.0, 1.0);
+    s = std::clamp(s * factor, 0.0, 1.0);
+    if (s == 0)
+    {
+        return {l, l, l, c.a};
+    }
+
+    const double m2 = l <= 0.5 ? l * (1 + s) : l + s - l * s, m1 = 2 * l - m2;
+    auto channel = [&] (double hue)
+    {
+        hue = std::fmod(hue + 360, 360);
+        if (hue < 60)
+        {
+            return m1 + (m2 - m1) * hue / 60;
+        }
+
+        if (hue < 180)
+        {
+            return m2;
+        }
+
+        if (hue < 240)
+        {
+            return m1 + (m2 - m1) * (240 - hue) / 60;
+        }
+
+        return m1;
+    };
+
+    return {channel(h + 120), channel(h), channel(h - 120), c.a};
+}
+
+}
+
+std::optional<wf::color_t> decoration_theme_t::lookup_css_color(const std::string& name, int depth) const
+{
+    auto it = css_colors.find(trim_ws(name));
+    if ((it == css_colors.end()) || (depth > 8))
+    {
+        return {};
+    }
+
+    return resolve_css_value(it->second, depth + 1);
+}
+
+std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::string& raw, int depth) const
+{
+    const std::string value = trim_ws(raw);
+    if (value.empty() || (depth > 8))
+    {
+        return {};
+    }
+
+    if (value[0] == '@')
+    {
+        return lookup_css_color(value.substr(1), depth + 1);
+    }
+
+    std::vector<std::string> args;
+    auto call = [&] (const std::string& fn)
+    {
+        if ((value.size() <= fn.size() + 1) || (value.compare(0, fn.size(), fn) != 0) ||
+            (value[fn.size()] != '(') || (value.back() != ')'))
+        {
+            return false;
+        }
+
+        args = split_css(value.substr(fn.size() + 1, value.size() - fn.size() - 2), ',');
+        return true;
+    };
+
+    if (call("alpha") && (args.size() == 2))
+    {
+        auto color = resolve_css_value(args[0], depth + 1);
+        if (color)
+        {
+            color->a *= strtod(args[1].c_str(), nullptr);
+        }
+
+        return color;
+    }
+
+    if (call("shade") && (args.size() == 2))
+    {
+        auto color = resolve_css_value(args[0], depth + 1);
+        if (!color)
+        {
+            return {};
+        }
+
+        return shade_color(*color, strtod(args[1].c_str(), nullptr));
+    }
+
+    if ((call("lighter") || call("darker")) && (args.size() == 1))
+    {
+        auto color = resolve_css_value(args[0], depth + 1);
+        if (!color)
+        {
+            return {};
+        }
+
+        return shade_color(*color, value[0] == 'l' ? 1.3 : 0.7);
+    }
+
+    if (call("mix") && (args.size() == 3))
+    {
+        auto a = resolve_css_value(args[0], depth + 1);
+        auto b = resolve_css_value(args[1], depth + 1);
+        if (!a || !b)
+        {
+            return {};
+        }
+
+        const double t = strtod(args[2].c_str(), nullptr);
+        return wf::color_t{a->r + (b->r - a->r) * t, a->g + (b->g - a->g) * t,
+            a->b + (b->b - a->b) * t, a->a + (b->a - a->a) * t};
+    }
+
+    if ((value == "transparent") || (value == "white") || (value[0] == '#') ||
+        (value.rfind("rgb", 0) == 0))
+    {
+        return parse_css_color(value);
+    }
+
+    if (value == "black")
+    {
+        return wf::color_t{0, 0, 0, 1};
+    }
+
+    return {};
+}
+
 }
 }

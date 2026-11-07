@@ -40,7 +40,7 @@
 		</option>
 		<option name="button_style" type="string">
 			<_short>Window button style</_short>
-			<_long>How window buttons are drawn. "auto" uses the GTK theme's metacity-1 titlebutton images if it ships them (for example WhiteSur), and falls back to drawing them otherwise. "gtk" always draws them in the GTK style. "pixmap" prefers theme images and only draws as a fallback.</_long>
+			<_long>How window buttons are drawn. "auto" uses the GTK theme's own buttons if it has them: its metacity-1 titlebutton images (for example WhiteSur), or buttons its Metacity XML builds from shared images (for example Orchis); otherwise they are drawn. "gtk" always draws them in the GTK style. "pixmap" prefers the theme's buttons and only draws as a fallback.</_long>
 			<default>auto</default>
 		</option>
 		<!-- Fallback Colors (used if GTK theme cannot be loaded) -->

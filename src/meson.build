@@ -1,6 +1,6 @@
 shared_module('gtkdecor',
     ['decoration.cpp', 'deco-subsurface.cpp', 'deco-button.cpp',
-     'deco-layout.cpp', 'deco-theme.cpp'],
+     'deco-layout.cpp', 'deco-theme.cpp', 'deco-metacity.cpp'],
     dependencies: gtkdecor_deps,
     cpp_args: gtkdecor_cpp_args,
     install: true,

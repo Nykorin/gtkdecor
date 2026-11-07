@@ -2,9 +2,12 @@
 #include <wayfire/render-manager.hpp>
 #include <wayfire/scene-render.hpp>
 #include "deco-button.hpp"
+#include "deco-metacity.hpp"
 #include <string>
 #include <memory>
 #include <map>
+#include <optional>
+#include <vector>
 
 namespace wf
 {
@@ -65,6 +68,15 @@ class decoration_theme_t
         double hover_progress;
         /** Whether the window is active/focused */
         bool activated = true;
+        /** Whether the window is maximized (for the unmaximize glyph) */
+        bool maximized = false;
+        /** Which end of the titlebar the buttons are at, and this button's
+         * place among them */
+        bool on_right = true;
+        int index     = 0;
+        int count     = 1;
+        /** Pixels per logical pixel the surface is rendered at */
+        double scale = 1.0;
     };
 
     /**
@@ -135,6 +147,15 @@ class decoration_theme_t
     mutable std::map<std::string, cairo_surface_t*> titlebutton_cache;
     void clear_titlebutton_cache() const;
     void parse_theme_css(const std::string& css_file) const;
+
+    /** The theme's @define-color variables, unresolved */
+    mutable std::map<std::string, std::string> css_colors;
+    /** Resolve a @define-color name, following @references and alpha()/shade()/mix() */
+    std::optional<wf::color_t> lookup_css_color(const std::string& name, int depth = 0) const;
+    std::optional<wf::color_t> resolve_css_value(const std::string& value, int depth = 0) const;
+
+    /** Buttons drawn from the theme's Metacity XML; null if it has none we can draw */
+    mutable std::unique_ptr<metacity_theme_t> metacity;
 
     /** A window button's colours, as declared in the theme's stylesheet */
     struct titlebutton_colors_t

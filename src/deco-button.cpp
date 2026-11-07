@@ -72,6 +72,23 @@ void button_t::set_activated(bool activated)
     }
 }
 
+void button_t::set_maximized(bool maximized)
+{
+    if (this->is_maximized != maximized)
+    {
+        this->is_maximized = maximized;
+        add_idle_damage();
+    }
+}
+
+void button_t::set_position(bool on_right, int index, int count)
+{
+    this->on_right = on_right;
+    this->index    = index;
+    this->count    = count;
+    update_texture();
+}
+
 void button_t::render(const scene::render_instruction_t& data, wf::geometry_t geometry)
 {
     data.pass->add_texture(button_texture.get_texture(), data.target, geometry, data.damage);
@@ -93,6 +110,11 @@ void button_t::update_texture()
         .border = 2.0,
         .hover_progress = hover,
         .activated = is_activated,
+        .maximized = is_maximized,
+        .on_right  = on_right,
+        .index     = index,
+        .count     = count,
+        .scale     = 2.0,
     };
 
     auto surface = theme.get_button_surface(type, state);

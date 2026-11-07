@@ -53,6 +53,7 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 - **Themed Window Buttons**: Uses your GTK theme's own button images when it ships them
   - macOS-style traffic lights from themes like WhiteSur, MacTahoe and Nordic
   - Separate images for hover, pressed and unfocused states
+  - Buttons the theme's Metacity XML builds from shared, recoloured images (Orchis style)
   - Falls back to drawing GTK-style buttons for themes without them
 
 - **Font Integration**: Automatically uses your GTK font settings
@@ -151,10 +152,17 @@ one per button and state, whatever they happen to be named — support for it is
 usually a small change and likely to get added.
 
 Some themes take a different approach and build their buttons at draw time from
-the Metacity theme XML, layering and recoloring shared images. Supporting that
-would mean implementing much of the Metacity theme engine, so those are unlikely
-to be added. Themes that define their buttons purely in XML, with no images at
-all, are in the same position. In both cases the drawn buttons are the intended
+the Metacity theme XML, layering and recoloring shared images: a glyph and a
+circle in `metacity-1/assets/`, tinted with colors from the GTK stylesheet
+(Orchis and themes built from it work this way). `gtkdecor` reads the part of
+the XML those buttons use: `<image>` and `<include>` drawing operations, the
+theme's colors and constants, and the usual position expressions. That covers
+hover, pressed, unfocused and maximized windows.
+
+Themes that draw their buttons with other operations, such as gradients,
+rectangles or lines, would need much more of the Metacity theme engine, so
+those are unlikely to be added; nor are themes that define their buttons purely
+in XML, with no images at all. In both cases the drawn buttons are the intended
 result rather than a bug.
 
 ## Requirements
@@ -163,6 +171,7 @@ result rather than a bug.
 - Cairo
 - Pango
 - librsvg 2.0 (optional, for SVG icon theme support)
+- libxml2 (optional, with librsvg for buttons from a theme's Metacity XML)
 
 ## How It Works
 
@@ -222,6 +231,7 @@ sudo ninja -C builddir install
 - `src/deco-layout.cpp/hpp` - Button layout and input handling
 - `src/deco-subsurface.cpp/hpp` - Scene graph integration
 - `src/deco-button.cpp/hpp` - Button rendering and state management
+- `src/deco-metacity.cpp/hpp` - Buttons from a theme's Metacity XML
 - `metadata/gtkdecor.xml` - Plugin metadata for Wayfire
 - `icons/plugin-gtkdecor.svg` - Plugin icon for WCM
 

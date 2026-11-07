@@ -115,9 +115,11 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             (double)size.width, (double)size.height};
 
         bool activated = false;
+        bool maximized = false;
         if (auto view = _view.lock())
         {
             activated = view->activated;
+            maximized = view->toplevel()->current().tiled_edges == wf::TILED_EDGES_ALL;
         }
 
         theme.render_background(data, geometry, activated);
@@ -138,6 +140,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             } else // button
             {
                 item->as_button().set_activated(activated);
+                item->as_button().set_maximized(maximized);
                 item->as_button().render(data, item->get_geometry() + origin);
             }
         }

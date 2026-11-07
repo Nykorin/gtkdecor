@@ -116,11 +116,12 @@ wf::geometry_t decoration_layout_t::create_buttons(int width, int)
         (double)button_height,
     };
 
-    for (auto type : buttons)
+    for (size_t i = 0; i < buttons.size(); i++)
     {
         this->layout_areas.push_back(std::make_unique<decoration_area_t>(
             button_geometry, damage_callback, theme));
-        this->layout_areas.back()->as_button().set_button_type(type);
+        this->layout_areas.back()->as_button().set_button_type(buttons[i]);
+        this->layout_areas.back()->as_button().set_position(on_right, i, buttons.size());
         button_geometry.x += per_button;
     }
 
