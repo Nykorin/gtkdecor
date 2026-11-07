@@ -792,6 +792,51 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         theme_titlebar_fg_inactive = theme_titlebar_fg_active;
     }
 
+    /* What GTK actually paints its title bar with: the header bar's
+     * background colour, with a flat image(<colour>) layer over it if the
+     * theme adds one */
+    auto over = [] (wf::color_t top, wf::color_t bottom)
+    {
+        const double a = top.a + bottom.a * (1 - top.a);
+        if (a <= 0)
+        {
+            return wf::color_t{0, 0, 0, 0};
+        }
+
+        auto mix = [&] (double t, double b) { return (t * top.a + b * bottom.a * (1 - top.a)) / a; };
+        return wf::color_t{mix(top.r, bottom.r), mix(top.g, bottom.g), mix(top.b, bottom.b), a};
+    };
+
+    for (bool backdrop : {false, true})
+    {
+        const auto path = frame_path(backdrop, {headerbar_node});
+        std::optional<wf::color_t> bar;
+        if (auto value = sheet.value(path, "background-color"))
+        {
+            bar = resolve_css_value(*value);
+        }
+
+        if (auto image = sheet.value(path, "background-image"))
+        {
+            const std::string img = *image;
+            if ((img.rfind("image(", 0) == 0) && (img.back() == ')'))
+            {
+                if (auto layer = resolve_css_value(img.substr(6, img.size() - 7)))
+                {
+                    bar = bar ? over(*layer, *bar) : *layer;
+                }
+            } else if (img != "none")
+            {
+                LOGI("Header bar background-image not supported, using its colour only: ", img);
+            }
+        }
+
+        if (bar)
+        {
+            (backdrop ? theme_titlebar_bg_inactive : theme_titlebar_bg_active) = *bar;
+        }
+    }
+
     parse_titlebutton_colors(css_content);
 
     /* Colour-coded buttons are designed for the titlebar the theme exports to
