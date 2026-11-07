@@ -664,6 +664,7 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
 
     const css_sheet_t::node_t decoration_node{"decoration", {}, {}};
     const css_sheet_t::node_t headerbar_node{"headerbar", {"titlebar", "default-decoration"}, {}};
+    const css_sheet_t::node_t title_node{"label", {"title"}, {}};
     auto frame_path = [] (bool backdrop, std::vector<css_sheet_t::node_t> nodes)
     {
         std::set<std::string> states;
@@ -834,6 +835,14 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         if (bar)
         {
             (backdrop ? theme_titlebar_bg_inactive : theme_titlebar_bg_active) = *bar;
+        }
+
+        if (auto value = sheet.inherited_value(frame_path(backdrop, {headerbar_node, title_node}), "color"))
+        {
+            if (auto color = resolve_css_value(*value))
+            {
+                (backdrop ? theme_titlebar_fg_inactive : theme_titlebar_fg_active) = *color;
+            }
         }
     }
 
@@ -1464,7 +1473,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
  * The caller is responsible for freeing the memory afterwards.
  */
 cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
-    int width, int height, int button_area_width) const
+    int width, int height, int button_area_width, bool active) const
 {
     const auto format = CAIRO_FORMAT_ARGB32;
     auto surface = cairo_image_surface_create(format, width, height);
@@ -1477,7 +1486,7 @@ cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
     // Lazy initialization: load GTK theme to get font settings
     load_gtk_theme();
 
-    wf::color_t color = theme_titlebar_fg_active;
+    wf::color_t color = active ? theme_titlebar_fg_active : theme_titlebar_fg_inactive;
     // Use config font color as fallback
     if (color.r == 0.0 && color.g == 0.0 && color.b == 0.0)
     {

@@ -69,7 +69,7 @@ class decoration_theme_t
      * @param button_area_width Width occupied by buttons at the titlebar edge (mirrored on the other side for centering)
      */
     cairo_surface_t *render_text(const std::string& text, int width, int height,
-        int button_area_width = 0) const;
+        int button_area_width = 0, bool active = true) const;
 
     struct button_state_t
     {

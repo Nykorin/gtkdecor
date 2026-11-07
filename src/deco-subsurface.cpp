@@ -40,7 +40,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         }
     };
 
-    void update_title(int width, int height, double scale)
+    void update_title(int width, int height, double scale, bool active)
     {
         if (auto view = _view.lock())
         {
@@ -50,13 +50,16 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             };
 
             if ((title_texture.tex.get_size() != target_size) ||
-                (title_texture.current_text != view->get_title()))
+                (title_texture.current_text != view->get_title()) ||
+                (title_texture.active != active))
             {
                 int btn_w = static_cast<int>(layout.get_button_area_width() * scale);
-                auto surface = theme.render_text(view->get_title(), target_size.width, target_size.height, btn_w);
+                auto surface = theme.render_text(view->get_title(), target_size.width,
+                    target_size.height, btn_w, active);
                 title_texture.tex = wf::owned_texture_t{surface};
                 cairo_surface_destroy(surface);
                 title_texture.current_text = view->get_title();
+                title_texture.active = active;
             }
         }
     }
@@ -65,6 +68,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
     {
         wf::owned_texture_t tex;
         std::string current_text = "";
+        bool active = true;
     } title_texture;
 
   public:
@@ -131,7 +135,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
             if (item->get_type() == wf::decor::DECORATION_AREA_TITLE)
             {
                 wf::geometry_t title_geometry = item->get_geometry() + origin;
-                update_title(title_geometry.width, title_geometry.height, data.target.scale);
+                update_title(title_geometry.width, title_geometry.height, data.target.scale, activated);
                 if (title_texture.tex.get_texture() != NULL)
                 {
                     data.pass->add_texture(title_texture.tex.get_texture(), data.target,

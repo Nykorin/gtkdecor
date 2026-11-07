@@ -42,6 +42,7 @@ recompiles against an upgraded Wayfire. To build and install by hand instead, se
 
 - **Automatic GTK3 Theme Integration**: Decorations automatically match your GTK theme
   - Titlebar colors from the theme's header bar, focused and unfocused
+  - Title text colors, focused and unfocused
   - Rounded corners with the theme's radius, square when tiled or maximized
   - Window borders with proper styling
 
