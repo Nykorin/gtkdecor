@@ -15,6 +15,7 @@
 #include "wayfire/toplevel.hpp"
 
 #include <sys/inotify.h>
+#include <cstring>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -104,11 +105,13 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
                 break;
             }
 
-            if (event->mask & (IN_MODIFY | IN_CLOSE_WRITE))
+            if ((event->len > 0) && (strcmp(event->name, "settings.ini") == 0) &&
+                (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)))
             {
                 LOGI("GTK settings changed, reloading decorations");
                 self->reload_all_decorations();
             }
+
             i += event_size;
         }
 
@@ -123,7 +126,10 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
             return;
         }
 
-        std::string settings_path = std::string(home) + "/.config/gtk-3.0/settings.ini";
+        /* Watch the directory rather than the file: settings are usually saved
+         * by writing a new file and renaming it over the old one, which would
+         * end a watch on the file itself */
+        std::string settings_path = std::string(home) + "/.config/gtk-3.0";
 
         inotify_fd = inotify_init1(IN_NONBLOCK);
         if (inotify_fd < 0)
@@ -132,7 +138,7 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
             return;
         }
 
-        watch_fd = inotify_add_watch(inotify_fd, settings_path.c_str(), IN_MODIFY | IN_CLOSE_WRITE);
+        watch_fd = inotify_add_watch(inotify_fd, settings_path.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO);
         if (watch_fd < 0)
         {
             LOGE("Failed to watch GTK settings file: ", settings_path);
@@ -146,7 +152,7 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
         inotify_source = wl_event_loop_add_fd(event_loop, inotify_fd, WL_EVENT_READABLE,
                                               handle_inotify_event, this);
 
-        LOGI("Monitoring GTK settings file for theme changes: ", settings_path);
+        LOGI("Monitoring GTK settings for theme changes in: ", settings_path);
     }
 
     void cleanup_gtk_settings_monitor()

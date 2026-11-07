@@ -221,6 +221,13 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         return wf::construct_box(get_offset(), size);
     }
 
+    /** Make the title be drawn again, e.g. after the theme's colours changed */
+    void invalidate_title()
+    {
+        title_texture.current_text.clear();
+        title_texture.tex = wf::owned_texture_t{};
+    }
+
     /* wf::compositor_surface_t implementation */
     void handle_pointer_enter(wf::pointf_t point) override
     {
@@ -393,4 +400,8 @@ wf::decoration_margins_t wf::simple_decorator_t::get_margins(const wf::toplevel_
 void wf::simple_decorator_t::reload_theme()
 {
     deco->theme.reload_theme();
+    deco->invalidate_title();
+    /* Buttons keep the image they last drew until their state changes; lay
+     * them out again so they all draw with the new theme */
+    deco->resize(deco->size);
 }
