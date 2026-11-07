@@ -180,6 +180,7 @@ class decoration_layout_t
     /** Unset hover state of hovered button at @position, if any */
     void unset_hover(std::optional<wf::pointf_t> position);
     wf::option_wrapper_t<std::string> button_order{"gtkdecor/button_order"};
+    wf::option_wrapper_t<std::string> button_position{"gtkdecor/button_position"};
 };
 }
 }

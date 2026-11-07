@@ -31,7 +31,12 @@
 		<option name="button_order" type="string">
 			<_short>Order of window buttons</_short>
 			<_long>Sets the order of the window buttons (from left to right).</_long>
-			<default>close minimize maximize</default>
+			<default>minimize maximize close</default>
+		</option>
+		<option name="button_position" type="string">
+			<_short>Window button position</_short>
+			<_long>Which end of the titlebar the window buttons sit at: "right" (default) or "left". The buttons keep the order given in button_order either way.</_long>
+			<default>right</default>
 		</option>
 		<option name="button_style" type="string">
 			<_short>Window button style</_short>

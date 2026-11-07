@@ -83,7 +83,10 @@ plugins = ... gtkdecor ...
 
 [gtkdecor]
 # Button order from left to right
-button_order = close minimize maximize
+button_order = minimize maximize close
+
+# Which end of the titlebar the buttons sit at: right (default) or left
+button_position = right
 
 # Window button style:
 #   auto   - use the theme's button images if it has them, else draw (default)

@@ -47,7 +47,7 @@ class decoration_theme_t
     /**
      * Render the given text on a cairo_surface_t with the given size.
      * The caller is responsible for freeing the memory afterwards.
-     * @param button_area_width Width occupied by buttons on the left side
+     * @param button_area_width Width occupied by buttons at the titlebar edge (mirrored on the other side for centering)
      */
     cairo_surface_t *render_text(const std::string& text, int width, int height,
         int button_area_width = 0) const;

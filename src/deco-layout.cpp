@@ -8,7 +8,7 @@
 
 #define BUTTON_HEIGHT_PC 0.64
 #define BUTTON_HORIZONTAL_SPACING 5
-#define BUTTON_LEFT_MARGIN 8
+#define BUTTON_EDGE_MARGIN 8
 
 namespace wf
 {
@@ -97,26 +97,38 @@ wf::geometry_t decoration_layout_t::create_buttons(int width, int)
     }
 
     int per_button = BUTTON_HORIZONTAL_SPACING + button_width;
+    int total_width = BUTTON_EDGE_MARGIN + buttons.size() * per_button;
+    cached_button_area_width = border_size + total_width;
+
+    /* The buttons are always placed left to right in the configured order;
+     * only the edge they hug changes. */
+    bool on_right = ((std::string)button_position != "left");
+    int buttons_span = buttons.empty() ? 0 :
+        buttons.size() * per_button - BUTTON_HORIZONTAL_SPACING;
+    int first_x = on_right ?
+        width - border_size - BUTTON_EDGE_MARGIN - buttons_span :
+        border_size + BUTTON_EDGE_MARGIN;
+
     wf::geometry_t button_geometry = {
-        (double)(border_size + BUTTON_LEFT_MARGIN), /* Start from left side */
+        (double)first_x,
         (double)(button_padding + border_size),
         (double)button_width,
         (double)button_height,
     };
 
-    for (auto type : buttons) /* Don't reverse - place left to right as specified */
+    for (auto type : buttons)
     {
         this->layout_areas.push_back(std::make_unique<decoration_area_t>(
             button_geometry, damage_callback, theme));
         this->layout_areas.back()->as_button().set_button_type(type);
-        button_geometry.x += per_button; /* Move to the right for next button */
+        button_geometry.x += per_button;
     }
 
-    int total_width = BUTTON_LEFT_MARGIN + buttons.size() * per_button;
-    cached_button_area_width = border_size + total_width;
-
+    /* Area around the buttons that still allows moving the window */
+    int area_x = on_right ? width - border_size - total_width :
+        border_size + BUTTON_EDGE_MARGIN;
     return {
-        (double)(border_size + BUTTON_LEFT_MARGIN), (double)border_size,
+        (double)area_x, (double)border_size,
         (double)total_width, (double)titlebar_size
     };
 }
