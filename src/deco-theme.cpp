@@ -674,20 +674,11 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         int corner_radius = 0, bottom_corner_radius = 0;
         int title_total = 0, button_size = 0, button_spacing = 0, button_edge = 0;
         wf::color_t bg_active, bg_inactive, fg_active, fg_inactive;
-        /* Empty / 0 when the stylesheet names no font */
-        std::string font_family;
-        int font_size = 0;
     };
     static parsed_t cache;
 
     if (!cache.valid || (cache.path != css_file) || (cache.content != css_content))
     {
-        /* Clear the font so we can tell whether the stylesheet sets one */
-        const std::string font_family_before = theme_font_family;
-        const int font_size_before = theme_font_size;
-        theme_font_family.clear();
-        theme_font_size = 0;
-
         parse_theme_css_content(css_content);
         LOGI("Parsed GTK theme colors from: ", css_file);
 
@@ -707,14 +698,7 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         cache.bg_inactive = theme_titlebar_bg_inactive;
         cache.fg_active   = theme_titlebar_fg_active;
         cache.fg_inactive = theme_titlebar_fg_inactive;
-        cache.font_family = theme_font_family;
-        cache.font_size   = theme_font_size;
         cache.valid = true;
-
-        /* Keep the caller's font where the stylesheet names none, as
-         * parsing in place always did */
-        theme_font_family = font_family_before;
-        theme_font_size   = font_size_before;
     }
 
     css_colors    = cache.css_colors;
@@ -731,15 +715,6 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     theme_titlebar_bg_inactive = cache.bg_inactive;
     theme_titlebar_fg_active   = cache.fg_active;
     theme_titlebar_fg_inactive = cache.fg_inactive;
-    if (!cache.font_family.empty())
-    {
-        theme_font_family = cache.font_family;
-    }
-
-    if (cache.font_size > 0)
-    {
-        theme_font_size = cache.font_size;
-    }
 }
 
 void decoration_theme_t::parse_theme_css_content(const std::string& css_content) const
@@ -1003,30 +978,6 @@ void decoration_theme_t::parse_theme_css_content(const std::string& css_content)
         use_wm_color("wm_unfocused_title", theme_titlebar_fg_inactive);
     }
 
-    // Try to find font settings - look for window.titlebar or headerbar font
-    std::regex font_regex(R"(font-family:\s*([^;]+);)");
-    std::regex font_size_regex(R"(font-size:\s*(\d+)(?:px|pt)?)");
-    std::smatch font_match;
-
-    // Search for headerbar or window titlebar font settings
-    std::string::const_iterator font_search_start(css_content.cbegin());
-    if (std::regex_search(font_search_start, css_content.cend(), font_match, font_regex))
-    {
-        theme_font_family = font_match[1].str();
-        // Remove quotes if present
-        theme_font_family.erase(std::remove(theme_font_family.begin(), theme_font_family.end(), '"'),
-                                theme_font_family.end());
-        theme_font_family.erase(std::remove(theme_font_family.begin(), theme_font_family.end(), '\''),
-                                theme_font_family.end());
-        LOGI("Found theme font family: ", theme_font_family);
-    }
-
-    if (std::regex_search(css_content, font_match, font_size_regex))
-    {
-        theme_font_size = std::stoi(font_match[1].str());
-        LOGI("Found theme font size: ", theme_font_size);
-    }
-
     LOGI("Titlebar bg active: rgba(",
          int(theme_titlebar_bg_active.r * 255), ", ",
          int(theme_titlebar_bg_active.g * 255), ", ",
@@ -1106,28 +1057,8 @@ void decoration_theme_t::load_gtk_theme() const
     icon_theme_name = get_icon_theme_name();
     LOGI("Found icon theme: ", icon_theme_name);
 
-    // Get font name from GTK settings
-    std::string gtk_font = get_gtk_font_name();
-    LOGI("GTK font from settings.ini: '", gtk_font, "'");
-
-    // Store whether we got font from GTK settings (to prevent CSS from overwriting it)
-    bool gtk_font_found = false;
-    if (!gtk_font.empty())
-    {
-        // Parse font string (format: "Font Name Size")
-        size_t last_space = gtk_font.rfind(' ');
-        if (last_space != std::string::npos)
-        {
-            theme_font_family = gtk_font.substr(0, last_space);
-            try {
-                theme_font_size = std::stoi(gtk_font.substr(last_space + 1));
-                gtk_font_found = true;  // Successfully parsed GTK font
-            } catch (...) {
-                theme_font_size = 11; // Default size
-            }
-            LOGI("Parsed font family: '", theme_font_family, "', size: ", theme_font_size);
-        }
-    }
+    /* The title font is read from settings.ini when a title is drawn */
+    LOGI("GTK font from settings.ini: '", get_gtk_font_name(), "'");
 
     // Get theme name from GTK settings
     std::string theme_name = get_gtk_theme_name();
@@ -1135,12 +1066,6 @@ void decoration_theme_t::load_gtk_theme() const
     if (theme_name.empty())
     {
         LOGE("Could not determine GTK theme name, using fallback colors");
-        // Set default font if not found from GTK settings
-        if (!gtk_font_found)
-        {
-            theme_font_family = "Sans";
-            theme_font_size = 10;
-        }
         return;
     }
 
@@ -1151,20 +1076,10 @@ void decoration_theme_t::load_gtk_theme() const
     if (css_file.empty())
     {
         LOGE("Could not find CSS file for theme: ", theme_name);
-        // Set default font if not found from GTK settings
-        if (!gtk_font_found)
-        {
-            theme_font_family = "Sans";
-            theme_font_size = 10;
-        }
         return;
     }
 
     LOGI("Loading theme CSS from: ", css_file);
-
-    // Save GTK font before parsing CSS (CSS might overwrite it)
-    std::string saved_font_family = theme_font_family;
-    int saved_font_size = theme_font_size;
 
     // Parse the CSS file
     parse_theme_css(css_file);
@@ -1173,19 +1088,6 @@ void decoration_theme_t::load_gtk_theme() const
     const std::string theme_dir = css_file.substr(0,
         css_file.rfind('/', css_file.rfind('/') - 1));
     metacity = load_metacity(theme_dir, css_colors);
-
-    // Restore GTK font if it was found (prioritize settings.ini over CSS)
-    if (gtk_font_found)
-    {
-        theme_font_family = saved_font_family;
-        theme_font_size = saved_font_size;
-    }
-    // Otherwise use CSS font if available, or default
-    else if (theme_font_family.empty())
-    {
-        theme_font_family = "Sans";
-        theme_font_size = 10;
-    }
 }
 
 /** Create a new theme with the default parameters */
@@ -1213,8 +1115,6 @@ void decoration_theme_t::reset_theme_values() const
     theme_button_size    = 0;
     theme_button_spacing = -1;
     theme_button_edge    = -1;
-    theme_font_family.clear();
-    theme_font_size = 0;
 }
 
 decoration_theme_t::~decoration_theme_t()

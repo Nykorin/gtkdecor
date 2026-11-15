@@ -225,12 +225,10 @@ result rather than a bug.
 
 1. **Theme Loading**: On first render, the plugin:
    - Reads your GTK settings from `~/.config/gtk-3.0/settings.ini`
-   - Extracts font family, weight, and size (e.g., "Source Sans 3 Semi-Bold 11")
    - Loads the GTK theme CSS file, and asks its cascade how GTK styles its own window
      frame: the `decoration`, header bar, title and title button nodes, so later and more
      specific rules win as they do in GTK
    - Reads the theme's Metacity XML for buttons built from shared images
-   - Font from settings.ini takes priority over CSS to ensure consistent rendering
    - Loads icon theme path
 
 2. **Rendering**: For each window:

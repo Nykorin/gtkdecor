@@ -148,8 +148,6 @@ class decoration_theme_t
     const wf::color_t theme_button_bg{0.4, 0.4, 0.4, 0.3};
     const wf::color_t theme_button_hover_bg{0.5, 0.5, 0.5, 0.4};
     const wf::color_t theme_button_active_bg{0.3, 0.3, 0.3, 0.5};
-    mutable std::string theme_font_family;
-    mutable int theme_font_size;
     mutable std::string icon_theme_name;
     mutable std::string gtk_theme_name;
 
