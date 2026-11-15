@@ -178,7 +178,11 @@ class decoration_theme_t
     /** Rendered titlebutton assets, keyed by "<path>@<size>" */
     mutable std::map<std::string, cairo_surface_t*> titlebutton_cache;
     void clear_titlebutton_cache() const;
+    /** Parse the theme's CSS, reusing the result of an earlier parse of the
+     * same file contents (shared by all decorations) */
     void parse_theme_css(const std::string& css_file) const;
+    /** The actual parse: slow (regexes over the whole stylesheet) */
+    void parse_theme_css_content(const std::string& css_content) const;
 
     /** The theme's @define-color variables, unresolved */
     mutable std::map<std::string, std::string> css_colors;

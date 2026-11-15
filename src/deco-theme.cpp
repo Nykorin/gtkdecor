@@ -644,6 +644,102 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     buffer << file.rdbuf();
     std::string css_content = buffer.str();
 
+    /*
+     * What parsing a stylesheet produced. Parsing a large theme takes a few
+     * hundred milliseconds on the compositor's thread, and every new view
+     * (X11 windows that are never mapped included) gets its own theme object,
+     * so the result is kept here and shared by all of them. The key is the
+     * file's path and full contents, so an edited or different theme is
+     * parsed again.
+     */
+    struct parsed_t
+    {
+        bool valid = false;
+        std::string path, content;
+
+        std::map<std::string, std::string> css_colors;
+        std::vector<css_shadow_t> shadow_active, shadow_inactive;
+        std::map<button_type_t, titlebutton_colors_t> titlebutton_colors;
+        int corner_radius = 0, bottom_corner_radius = 0;
+        int title_total = 0, button_size = 0, button_spacing = 0, button_edge = 0;
+        wf::color_t bg_active, bg_inactive, fg_active, fg_inactive;
+        wf::color_t button_bg, button_hover_bg, button_active_bg;
+        /* Empty / 0 when the stylesheet names no font */
+        std::string font_family;
+        int font_size = 0;
+    };
+    static parsed_t cache;
+
+    if (!cache.valid || (cache.path != css_file) || (cache.content != css_content))
+    {
+        /* Clear the font so we can tell whether the stylesheet sets one */
+        const std::string font_family_before = theme_font_family;
+        const int font_size_before = theme_font_size;
+        theme_font_family.clear();
+        theme_font_size = 0;
+
+        parse_theme_css_content(css_content);
+        LOGI("Parsed GTK theme colors from: ", css_file);
+
+        cache.path    = css_file;
+        cache.content = std::move(css_content);
+        cache.css_colors    = css_colors;
+        cache.shadow_active = shadow_active;
+        cache.shadow_inactive    = shadow_inactive;
+        cache.titlebutton_colors = titlebutton_colors;
+        cache.corner_radius = corner_radius;
+        cache.bottom_corner_radius = bottom_corner_radius;
+        cache.title_total    = theme_title_total;
+        cache.button_size    = theme_button_size;
+        cache.button_spacing = theme_button_spacing;
+        cache.button_edge    = theme_button_edge;
+        cache.bg_active   = theme_titlebar_bg_active;
+        cache.bg_inactive = theme_titlebar_bg_inactive;
+        cache.fg_active   = theme_titlebar_fg_active;
+        cache.fg_inactive = theme_titlebar_fg_inactive;
+        cache.button_bg = theme_button_bg;
+        cache.button_hover_bg  = theme_button_hover_bg;
+        cache.button_active_bg = theme_button_active_bg;
+        cache.font_family = theme_font_family;
+        cache.font_size   = theme_font_size;
+        cache.valid = true;
+
+        /* Keep the caller's font where the stylesheet names none, as
+         * parsing in place always did */
+        theme_font_family = font_family_before;
+        theme_font_size   = font_size_before;
+    }
+
+    css_colors    = cache.css_colors;
+    shadow_active = cache.shadow_active;
+    shadow_inactive    = cache.shadow_inactive;
+    titlebutton_colors = cache.titlebutton_colors;
+    corner_radius = cache.corner_radius;
+    bottom_corner_radius = cache.bottom_corner_radius;
+    theme_title_total    = cache.title_total;
+    theme_button_size    = cache.button_size;
+    theme_button_spacing = cache.button_spacing;
+    theme_button_edge    = cache.button_edge;
+    theme_titlebar_bg_active   = cache.bg_active;
+    theme_titlebar_bg_inactive = cache.bg_inactive;
+    theme_titlebar_fg_active   = cache.fg_active;
+    theme_titlebar_fg_inactive = cache.fg_inactive;
+    theme_button_bg = cache.button_bg;
+    theme_button_hover_bg  = cache.button_hover_bg;
+    theme_button_active_bg = cache.button_active_bg;
+    if (!cache.font_family.empty())
+    {
+        theme_font_family = cache.font_family;
+    }
+
+    if (cache.font_size > 0)
+    {
+        theme_font_size = cache.font_size;
+    }
+}
+
+void decoration_theme_t::parse_theme_css_content(const std::string& css_content) const
+{
     // Build map of @define-color variables
     std::map<std::string, std::string> color_vars;
     std::regex define_color_regex(R"(@define-color\s+(\w+)\s+([^;]+);)");
@@ -932,7 +1028,6 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         LOGI("Found theme font size: ", theme_font_size);
     }
 
-    LOGI("Parsed GTK theme colors from: ", css_file);
     LOGI("Titlebar bg active: rgba(",
          int(theme_titlebar_bg_active.r * 255), ", ",
          int(theme_titlebar_bg_active.g * 255), ", ",
