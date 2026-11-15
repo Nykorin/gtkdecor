@@ -1,0 +1,14 @@
+/*
+ * Export only the entry points Wayfire looks up. gtkdecor is a fork of
+ * Wayfire's decoration plugin and shares its class names; with everything
+ * exported, a Wayfire that had loaded the built-in plugin earlier (plugins
+ * swapped while running) resolved gtkdecor's calls into the built-in
+ * plugin's code, which crashed on gtkdecor's objects.
+ */
+{
+    global:
+        newInstance;
+        getWayfireVersion;
+    local:
+        *;
+};
