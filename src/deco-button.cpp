@@ -100,6 +100,15 @@ void button_t::render(const scene::render_instruction_t& data, wf::geometry_t ge
 
 void button_t::update_texture()
 {
+    const double progress = hover;
+    const int phase = (progress > 0) ? 1 : ((progress < 0) ? -1 : 0);
+    const auto key  = std::make_tuple((int)type, phase, is_activated, is_maximized, on_right,
+        index, count, theme.get_button_size());
+    if (texture_valid && (key == texture_key))
+    {
+        return;
+    }
+
     /**
      * Render at 2x resolution for crisp display
      * This prevents blurriness when rendered on screen
@@ -108,7 +117,7 @@ void button_t::update_texture()
         .width  = 2.0 * theme.get_button_size(),
         .height = 2.0 * theme.get_button_size(),
         .border = 2.0,
-        .hover_progress = hover,
+        .hover_progress = progress,
         .activated = is_activated,
         .maximized = is_maximized,
         .on_right  = on_right,
@@ -120,6 +129,8 @@ void button_t::update_texture()
     auto surface = theme.get_button_surface(type, state);
     this->button_texture = owned_texture_t{surface};
     cairo_surface_destroy(surface);
+    texture_key   = key;
+    texture_valid = true;
 }
 
 void button_t::add_idle_damage()

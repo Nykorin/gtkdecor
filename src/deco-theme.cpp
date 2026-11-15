@@ -235,6 +235,14 @@ std::string decoration_theme_t::find_titlebutton_file(button_type_t button,
     const bool pressed = state.hover_progress < 0;
     const bool hovered = state.hover_progress > 0;
 
+    const std::string cache_key = action + (state.activated ? "/focused" : "/unfocused") +
+        (pressed ? "/pressed" : (hovered ? "/hover" : "/normal"));
+    auto cached = titlebutton_path_cache.find(cache_key);
+    if (cached != titlebutton_path_cache.end())
+    {
+        return cached->second;
+    }
+
     /* Two naming conventions are in the wild, and a theme uses one or the
      * other, so both are tried at each state:
      *
@@ -299,12 +307,14 @@ std::string decoration_theme_t::find_titlebutton_file(button_type_t button,
                 struct stat buffer;
                 if (stat(path.c_str(), &buffer) == 0)
                 {
+                    titlebutton_path_cache[cache_key] = path;
                     return path;
                 }
             }
         }
     }
 
+    titlebutton_path_cache[cache_key] = "";
     return "";
 }
 
@@ -1226,6 +1236,7 @@ void decoration_theme_t::reload_theme() const
     LOGI("Reloading GTK theme and icons");
     invalidate_cache();
     clear_titlebutton_cache();
+    titlebutton_path_cache.clear();
     titlebutton_colors.clear();
     css_colors.clear();
     metacity.reset();

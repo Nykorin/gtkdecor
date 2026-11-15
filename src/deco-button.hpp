@@ -8,6 +8,7 @@
 #include <wayfire/plugins/common/cairo-util.hpp>
 
 #include <cairo.h>
+#include <tuple>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 
@@ -97,6 +98,11 @@ class button_t
     bool is_pressed = false;
     /* Whether the parent window is active/focused */
     bool is_activated = true;
+    /* What the current texture was drawn for: the theme draws a button only
+     * by phase (normal, hovered, pressed), not by how far the hover animation
+     * has got, so the animation's frames in between reuse it */
+    bool texture_valid = false;
+    std::tuple<int, int, bool, bool, bool, int, int, int> texture_key;
     /* Whether the parent window is maximized */
     bool is_maximized = false;
     /* Place in the button group */

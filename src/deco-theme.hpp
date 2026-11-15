@@ -175,6 +175,10 @@ class decoration_theme_t
      */
     cairo_surface_t *get_titlebutton_asset(const std::string& path, int size) const;
 
+    /** find_titlebutton_file() results, "" included, keyed by button and state:
+     * the search stats up to 80 paths */
+    mutable std::map<std::string, std::string> titlebutton_path_cache;
+
     /** Rendered titlebutton assets, keyed by "<path>@<size>" */
     mutable std::map<std::string, cairo_surface_t*> titlebutton_cache;
     void clear_titlebutton_cache() const;
