@@ -181,17 +181,29 @@ class decoration_theme_t
     /** Parse the theme's CSS, reusing the result of an earlier parse of the
      * same file contents (shared by all decorations) */
     void parse_theme_css(const std::string& css_file) const;
+    /** The theme's Metacity buttons, shared by every decoration (see the definition) */
+    static std::shared_ptr<metacity_theme_t> load_metacity(const std::string& theme_dir,
+        const std::map<std::string, std::string>& colors);
     /** The actual parse: slow (regexes over the whole stylesheet) */
     void parse_theme_css_content(const std::string& css_content) const;
 
     /** The theme's @define-color variables, unresolved */
     mutable std::map<std::string, std::string> css_colors;
     /** Resolve a @define-color name, following @references and alpha()/shade()/mix() */
-    std::optional<wf::color_t> lookup_css_color(const std::string& name, int depth = 0) const;
-    std::optional<wf::color_t> resolve_css_value(const std::string& value, int depth = 0) const;
+    using css_color_table_t = std::map<std::string, std::string>;
+    static std::optional<wf::color_t> lookup_css_color(const css_color_table_t& colors,
+        const std::string& name, int depth = 0);
+    static std::optional<wf::color_t> resolve_css_value(const css_color_table_t& colors,
+        const std::string& value, int depth = 0);
+    /** resolve_css_value() in this theme's colours */
+    std::optional<wf::color_t> resolve_css_value(const std::string& value) const
+    {
+        return resolve_css_value(css_colors, value);
+    }
 
-    /** Buttons drawn from the theme's Metacity XML; null if it has none we can draw */
-    mutable std::unique_ptr<metacity_theme_t> metacity;
+    /** Buttons drawn from the theme's Metacity XML; null if it has none we can
+     * draw. Shared by every decoration using the same theme. */
+    mutable std::shared_ptr<metacity_theme_t> metacity;
 
     /** One layer of a CSS box-shadow */
     struct css_shadow_t
@@ -222,7 +234,7 @@ class decoration_theme_t
     /** Filled only for themes that colour each button differently */
     mutable std::map<button_type_t, titlebutton_colors_t> titlebutton_colors;
     void parse_titlebutton_colors(std::string css) const;
-    wf::color_t parse_css_color(const std::string& color_str) const;
+    static wf::color_t parse_css_color(const std::string& color_str);
 
     // Background surface cache — avoids recreating Cairo surfaces every frame
     mutable struct bg_cache_t

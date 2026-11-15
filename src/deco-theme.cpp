@@ -20,7 +20,7 @@ namespace wf
 namespace decor
 {
 /** Parse CSS color string to wf::color_t */
-wf::color_t decoration_theme_t::parse_css_color(const std::string& color_str) const
+wf::color_t decoration_theme_t::parse_css_color(const std::string& color_str)
 {
     wf::color_t color{0, 0, 0, 1.0};
 
@@ -1035,6 +1035,64 @@ void decoration_theme_t::parse_theme_css_content(const std::string& css_content)
          theme_titlebar_bg_active.a, ")");
 }
 
+/**
+ * The theme's Metacity buttons, shared by every decoration. Reading the XML
+ * and drawing a test button costs several milliseconds on the compositor's
+ * thread, and every new view (X11 windows that are never mapped included)
+ * gets its own theme object. The key is the theme directory, the size and
+ * modification time of each Metacity XML file it may use, and the stylesheet
+ * colours the buttons are tinted with, so an edited or different theme is
+ * loaded again.
+ *
+ * @return The shared theme, or null if it has no buttons we can draw.
+ */
+std::shared_ptr<metacity_theme_t> decoration_theme_t::load_metacity(const std::string& theme_dir,
+    const css_color_table_t& colors)
+{
+    std::string key = theme_dir;
+    for (const char *name : {"metacity-theme-3.xml", "metacity-theme-2.xml", "metacity-theme-1.xml"})
+    {
+        struct stat st;
+        const std::string path = theme_dir + "/metacity-1/" + name;
+        if (stat(path.c_str(), &st) == 0)
+        {
+            key += "\n" + path + " " + std::to_string(st.st_size) + " " +
+                std::to_string(st.st_mtim.tv_sec) + "." + std::to_string(st.st_mtim.tv_nsec);
+        }
+    }
+
+    static struct
+    {
+        bool valid = false;
+        std::string key;
+        css_color_table_t colors;
+        std::shared_ptr<metacity_theme_t> theme;
+    } shared;
+
+    if (shared.valid && (shared.key == key) && (shared.colors == colors))
+    {
+        return shared.theme;
+    }
+
+    /* The buttons resolve colours by name; give them their own copy of the
+     * table, as the theme object that loads them may be gone before they are */
+    auto table = std::make_shared<const css_color_table_t>(colors);
+    auto theme = std::make_shared<metacity_theme_t>();
+    if (theme->load(theme_dir, [table] (const std::string& name) { return lookup_css_color(*table, name); }))
+    {
+        LOGI("Drawing window buttons from the theme's Metacity XML");
+    } else
+    {
+        theme.reset();
+    }
+
+    shared.valid  = true;
+    shared.key    = std::move(key);
+    shared.colors = colors;
+    shared.theme  = theme;
+    return theme;
+}
+
 /** Load GTK theme by parsing CSS files */
 void decoration_theme_t::load_gtk_theme() const
 {
@@ -1115,14 +1173,7 @@ void decoration_theme_t::load_gtk_theme() const
     /* <theme>/gtk-3.0/gtk.css -> <theme> */
     const std::string theme_dir = css_file.substr(0,
         css_file.rfind('/', css_file.rfind('/') - 1));
-    metacity = std::make_unique<metacity_theme_t>();
-    if (metacity->load(theme_dir, [this] (const std::string& name) { return lookup_css_color(name); }))
-    {
-        LOGI("Drawing window buttons from the theme's Metacity XML");
-    } else
-    {
-        metacity.reset();
-    }
+    metacity = load_metacity(theme_dir, css_colors);
 
     // Restore GTK font if it was found (prioritize settings.ini over CSS)
     if (gtk_font_found)
@@ -2175,18 +2226,20 @@ void blur_alpha(cairo_surface_t *surface, double sigma)
 }
 }
 
-std::optional<wf::color_t> decoration_theme_t::lookup_css_color(const std::string& name, int depth) const
+std::optional<wf::color_t> decoration_theme_t::lookup_css_color(const css_color_table_t& colors,
+    const std::string& name, int depth)
 {
-    auto it = css_colors.find(trim_ws(name));
-    if ((it == css_colors.end()) || (depth > 8))
+    auto it = colors.find(trim_ws(name));
+    if ((it == colors.end()) || (depth > 8))
     {
         return {};
     }
 
-    return resolve_css_value(it->second, depth + 1);
+    return resolve_css_value(colors, it->second, depth + 1);
 }
 
-std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::string& raw, int depth) const
+std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const css_color_table_t& colors,
+    const std::string& raw, int depth)
 {
     const std::string value = trim_ws(raw);
     if (value.empty() || (depth > 8))
@@ -2196,7 +2249,7 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
 
     if (value[0] == '@')
     {
-        return lookup_css_color(value.substr(1), depth + 1);
+        return lookup_css_color(colors, value.substr(1), depth + 1);
     }
 
     std::vector<std::string> args;
@@ -2214,7 +2267,7 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
 
     if (call("alpha") && (args.size() == 2))
     {
-        auto color = resolve_css_value(args[0], depth + 1);
+        auto color = resolve_css_value(colors, args[0], depth + 1);
         if (color)
         {
             color->a *= strtod(args[1].c_str(), nullptr);
@@ -2225,7 +2278,7 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
 
     if (call("shade") && (args.size() == 2))
     {
-        auto color = resolve_css_value(args[0], depth + 1);
+        auto color = resolve_css_value(colors, args[0], depth + 1);
         if (!color)
         {
             return {};
@@ -2236,7 +2289,7 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
 
     if ((call("lighter") || call("darker")) && (args.size() == 1))
     {
-        auto color = resolve_css_value(args[0], depth + 1);
+        auto color = resolve_css_value(colors, args[0], depth + 1);
         if (!color)
         {
             return {};
@@ -2247,8 +2300,8 @@ std::optional<wf::color_t> decoration_theme_t::resolve_css_value(const std::stri
 
     if (call("mix") && (args.size() == 3))
     {
-        auto a = resolve_css_value(args[0], depth + 1);
-        auto b = resolve_css_value(args[1], depth + 1);
+        auto a = resolve_css_value(colors, args[0], depth + 1);
+        auto b = resolve_css_value(colors, args[1], depth + 1);
         if (!a || !b)
         {
             return {};
