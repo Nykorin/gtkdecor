@@ -308,6 +308,18 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
         if (auto toplevel = wf::toplevel_cast(view))
         {
             const bool wants_decoration = should_decorate_view(toplevel);
+
+            /* X11 views announce their decoration state as soon as they are
+             * created, and many are never mapped (Steam creates several on
+             * start). Building a decoration costs time on this thread, so a
+             * view that is not mapped, and not about to be, gets one only
+             * when it maps: on_new_tx decorates it then. */
+            const auto& state = toplevel->toplevel();
+            if (wants_decoration && !state->current().mapped && !state->pending().mapped)
+            {
+                return;
+            }
+
             if (wants_decoration != is_toplevel_decorated(toplevel->toplevel()))
             {
                 if (wants_decoration)
