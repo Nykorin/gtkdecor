@@ -116,7 +116,7 @@ button_position = right
 # Window button style:
 #   auto   - use the theme's button images if it has them, else draw (default)
 #   gtk    - always draw GTK-style buttons
-#   pixmap - prefer the theme's images, draw only as a fallback
+#   pixmap - the same as auto
 button_style = auto
 
 # Titlebar and border sizes. title_height = -1 follows the GTK theme: as

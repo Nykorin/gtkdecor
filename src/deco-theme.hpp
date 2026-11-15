@@ -67,11 +67,6 @@ class decoration_theme_t
     shadow_extents_t get_shadow_extents() const;
 
     /**
-     * Get corner radius for rounded titlebar
-     */
-    int get_corner_radius() const;
-
-    /**
      * Render the given text on a cairo_surface_t with the given size.
      * The caller is responsible for freeing the memory afterwards.
      * @param button_area_width Width occupied by buttons at the titlebar edge (mirrored on the other side for centering)
@@ -123,21 +118,25 @@ class decoration_theme_t
     wf::option_wrapper_t<int> border_size{"gtkdecor/border_size"};
     wf::option_wrapper_t<wf::color_t> active_color{"gtkdecor/active_color"};
     wf::option_wrapper_t<wf::color_t> inactive_color{"gtkdecor/inactive_color"};
-    /** auto: use the GTK theme's metacity-1 titlebuttons if it ships them,
-     * otherwise draw them; gtk: always draw; pixmap: only use theme assets */
+    /** auto (and pixmap, which is the same): use the GTK theme's own buttons
+     * (metacity-1 titlebutton images, or buttons its Metacity XML builds) if it
+     * has them, otherwise draw them; gtk: always draw */
     wf::option_wrapper_t<std::string> button_style{"gtkdecor/button_style"};
     /** Draw the GTK theme's window shadow (its "decoration" box-shadow) */
     wf::option_wrapper_t<bool> theme_shadow{"gtkdecor/shadow"};
 
-    // Rounded corner radii: the theme's "decoration" border-radius, else these
-    mutable int corner_radius = 12;        // Top corners
-    mutable int bottom_corner_radius = 8;  // Bottom corners
+    // Rounded corner radii: the theme's "decoration" border-radius, else 12 / 8
+    mutable int corner_radius;         // Top corners
+    mutable int bottom_corner_radius;  // Bottom corners
 
     /* Sizes from the theme's header bar and title buttons (0/-1: none given) */
-    mutable int theme_title_total    = 0;
-    mutable int theme_button_size    = 0;
-    mutable int theme_button_spacing = -1;
-    mutable int theme_button_edge    = -1;
+    mutable int theme_title_total;
+    mutable int theme_button_size;
+    mutable int theme_button_spacing;
+    mutable int theme_button_edge;
+
+    /** Set everything the stylesheet may change back to the built-in defaults */
+    void reset_theme_values() const;
 
     // GTK theme parsing (mutable for lazy initialization)
     mutable bool theme_loaded;
@@ -145,9 +144,10 @@ class decoration_theme_t
     mutable wf::color_t theme_titlebar_bg_inactive;
     mutable wf::color_t theme_titlebar_fg_active;
     mutable wf::color_t theme_titlebar_fg_inactive;
-    mutable wf::color_t theme_button_bg;
-    mutable wf::color_t theme_button_hover_bg;
-    mutable wf::color_t theme_button_active_bg;
+    /* The drawn buttons' circle: normal, hovered, pressed */
+    const wf::color_t theme_button_bg{0.4, 0.4, 0.4, 0.3};
+    const wf::color_t theme_button_hover_bg{0.5, 0.5, 0.5, 0.4};
+    const wf::color_t theme_button_active_bg{0.3, 0.3, 0.3, 0.5};
     mutable std::string theme_font_family;
     mutable int theme_font_size;
     mutable std::string icon_theme_name;

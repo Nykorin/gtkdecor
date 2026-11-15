@@ -17,7 +17,6 @@
 #include <sys/inotify.h>
 #include <cstring>
 #include <unistd.h>
-#include <fcntl.h>
 
 class wayfire_gtkdecor : public wf::plugin_interface_t
 {
@@ -202,7 +201,6 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
   public:
     void init() override
     {
-        LOGE("=== DECORATION PLUGIN INIT() CALLED ===");
         wf::get_core().connect(&on_decoration_state_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
         wf::get_core().connect(&on_view_tiled);

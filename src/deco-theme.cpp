@@ -674,7 +674,6 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         int corner_radius = 0, bottom_corner_radius = 0;
         int title_total = 0, button_size = 0, button_spacing = 0, button_edge = 0;
         wf::color_t bg_active, bg_inactive, fg_active, fg_inactive;
-        wf::color_t button_bg, button_hover_bg, button_active_bg;
         /* Empty / 0 when the stylesheet names no font */
         std::string font_family;
         int font_size = 0;
@@ -708,9 +707,6 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
         cache.bg_inactive = theme_titlebar_bg_inactive;
         cache.fg_active   = theme_titlebar_fg_active;
         cache.fg_inactive = theme_titlebar_fg_inactive;
-        cache.button_bg = theme_button_bg;
-        cache.button_hover_bg  = theme_button_hover_bg;
-        cache.button_active_bg = theme_button_active_bg;
         cache.font_family = theme_font_family;
         cache.font_size   = theme_font_size;
         cache.valid = true;
@@ -735,9 +731,6 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     theme_titlebar_bg_inactive = cache.bg_inactive;
     theme_titlebar_fg_active   = cache.fg_active;
     theme_titlebar_fg_inactive = cache.fg_inactive;
-    theme_button_bg = cache.button_bg;
-    theme_button_hover_bg  = cache.button_hover_bg;
-    theme_button_active_bg = cache.button_active_bg;
     if (!cache.font_family.empty())
     {
         theme_font_family = cache.font_family;
@@ -1010,11 +1003,6 @@ void decoration_theme_t::parse_theme_css_content(const std::string& css_content)
         use_wm_color("wm_unfocused_title", theme_titlebar_fg_inactive);
     }
 
-    // Set button colors - matching GTK style (visible circular backgrounds)
-    theme_button_bg = wf::color_t{0.4, 0.4, 0.4, 0.3};  // Gray circle in normal state
-    theme_button_hover_bg = wf::color_t{0.5, 0.5, 0.5, 0.4};  // Lighter on hover
-    theme_button_active_bg = wf::color_t{0.3, 0.3, 0.3, 0.5};  // Darker when pressed
-
     // Try to find font settings - look for window.titlebar or headerbar font
     std::regex font_regex(R"(font-family:\s*([^;]+);)");
     std::regex font_size_regex(R"(font-size:\s*(\d+)(?:px|pt)?)");
@@ -1203,17 +1191,30 @@ void decoration_theme_t::load_gtk_theme() const
 /** Create a new theme with the default parameters */
 decoration_theme_t::decoration_theme_t() :
     button_flags{},
-    theme_loaded(false),
-    theme_titlebar_bg_active{0.1, 0.1, 0.15, 1.0},
-    theme_titlebar_bg_inactive{0.15, 0.15, 0.2, 1.0},
-    theme_titlebar_fg_active{0.9, 0.9, 0.93, 1.0},
-    theme_titlebar_fg_inactive{0.7, 0.7, 0.73, 0.7},
-    theme_button_bg{0.4, 0.4, 0.4, 0.3},
-    theme_button_hover_bg{0.5, 0.5, 0.5, 0.4},
-    theme_button_active_bg{0.3, 0.3, 0.3, 0.5},
-    theme_font_family(""),
-    theme_font_size(0)
+    theme_loaded(false)
 {
+    reset_theme_values();
+}
+
+/**
+ * The values a theme starts from, before its stylesheet is parsed. A new
+ * theme object and a reload must start from the same ones: the stylesheet
+ * cache in parse_theme_css() relies on it.
+ */
+void decoration_theme_t::reset_theme_values() const
+{
+    theme_titlebar_bg_active   = wf::color_t{0.1, 0.1, 0.15, 1.0};
+    theme_titlebar_bg_inactive = wf::color_t{0.15, 0.15, 0.2, 1.0};
+    theme_titlebar_fg_active   = wf::color_t{0.9, 0.9, 0.93, 1.0};
+    theme_titlebar_fg_inactive = wf::color_t{0.7, 0.7, 0.73, 0.7};
+    corner_radius = 12;
+    bottom_corner_radius = 8;
+    theme_title_total    = 0;
+    theme_button_size    = 0;
+    theme_button_spacing = -1;
+    theme_button_edge    = -1;
+    theme_font_family.clear();
+    theme_font_size = 0;
 }
 
 decoration_theme_t::~decoration_theme_t()
@@ -1243,22 +1244,10 @@ void decoration_theme_t::reload_theme() const
     metacity.reset();
     shadow_active.clear();
     shadow_inactive.clear();
-    corner_radius = 12;
-    bottom_corner_radius = 8;
-    theme_title_total    = 0;
-    theme_button_size    = 0;
-    theme_button_spacing = -1;
-    theme_button_edge    = -1;
     theme_loaded = false;
     icon_theme_name.clear();
     gtk_theme_name.clear();
-    theme_font_family.clear();
-    theme_font_size = 0;
-    // Reset colors to defaults - they'll be reloaded
-    theme_titlebar_bg_active = wf::color_t{0.1, 0.1, 0.15, 1.0};
-    theme_titlebar_bg_inactive = wf::color_t{0.15, 0.15, 0.2, 1.0};
-    theme_titlebar_fg_active = wf::color_t{0.9, 0.9, 0.93, 1.0};
-    theme_titlebar_fg_inactive = wf::color_t{0.7, 0.7, 0.73, 0.7};
+    reset_theme_values();
 }
 
 /** @return The available height for displaying the title */
@@ -1309,12 +1298,6 @@ int decoration_theme_t::get_border_size() const
     return border_size;
 }
 
-/** @return The corner radius for rounded titlebar */
-int decoration_theme_t::get_corner_radius() const
-{
-    return corner_radius;
-}
-
 /** @return The available border for resizing */
 void decoration_theme_t::set_buttons(button_type_t flags)
 {
@@ -1340,8 +1323,8 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     load_gtk_theme();
 
     /* Tiled windows have square corners, as in GTK */
-    const int corner_radius = tiled ? 0 : this->corner_radius;
-    const int bottom_corner_radius = tiled ? 0 : this->bottom_corner_radius;
+    const int top_radius    = tiled ? 0 : corner_radius;
+    const int bottom_radius = tiled ? 0 : bottom_corner_radius;
 
     const auto& shadow_layers = active ? shadow_active : shadow_inactive;
     const bool use_theme_shadow = theme_shadow && !shadow_active.empty();
@@ -1461,7 +1444,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_paint(cr);
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-        double radius = corner_radius;
+        double radius = top_radius;
         double x = shadow_blur, y = shadow_blur;
         double w = titlebar_rect.width, h = titlebar_rect.height;
 
@@ -1516,7 +1499,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     // --- Left border ---
     if (border_size > 0)
     {
-        int border_h = rectangle.height - corner_radius - bottom_corner_radius + 1;
+        int border_h = rectangle.height - top_radius - bottom_radius + 1;
         auto left_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
             border_size + shadow_blur, border_h);
         auto left_cr = cairo_create(left_surface);
@@ -1541,7 +1524,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_destroy(left_cr);
 
         bg_cache.left_rect = {
-            rectangle.x - shadow_blur, rectangle.y + corner_radius - 1,
+            rectangle.x - shadow_blur, rectangle.y + top_radius - 1,
             (double)(border_size + shadow_blur), (double)border_h
         };
         bg_cache.left_tex = std::make_unique<wf::owned_texture_t>(left_surface);
@@ -1553,7 +1536,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     // --- Right border ---
     if (border_size > 0)
     {
-        int border_h = rectangle.height - corner_radius - bottom_corner_radius + 1;
+        int border_h = rectangle.height - top_radius - bottom_radius + 1;
         auto right_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
             border_size + shadow_blur, border_h);
         auto right_cr = cairo_create(right_surface);
@@ -1578,7 +1561,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_destroy(right_cr);
 
         bg_cache.right_rect = {
-            rectangle.x + rectangle.width - border_size, rectangle.y + corner_radius - 1,
+            rectangle.x + rectangle.width - border_size, rectangle.y + top_radius - 1,
             (double)(border_size + shadow_blur), (double)border_h
         };
         bg_cache.right_tex = std::make_unique<wf::owned_texture_t>(right_surface);
@@ -1590,7 +1573,7 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
     // --- Bottom border with rounded bottom corners ---
     if (border_size > 0)
     {
-        double br = bottom_corner_radius;
+        double br = bottom_radius;
         int bottom_h = border_size + (int)br;  // Extra height for corner arcs
         int surface_w = rectangle.width + shadow_blur * 2;
         int surface_h = bottom_h + shadow_blur;
@@ -1666,8 +1649,8 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         cairo_paint(outline_cr);
         cairo_set_operator(outline_cr, CAIRO_OPERATOR_OVER);
 
-        double r = corner_radius;
-        double br = bottom_corner_radius;
+        double r = top_radius;
+        double br = bottom_radius;
         double w = rectangle.width;
         double h = rectangle.height;
 
@@ -1767,7 +1750,7 @@ cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
     pango_layout_set_font_description(layout, font_desc);
     pango_layout_set_text(layout, text.c_str(), text.size());
 
-    // Reserve space for buttons on the left and mirror on the right for centering
+    // Keep the buttons' width clear on both sides, so the title stays centred
     int left_padding = (button_area_width > 0) ? button_area_width : 10;
     int right_padding = left_padding;  // Mirror for true visual centering
     int text_width = width - left_padding - right_padding;
@@ -1804,9 +1787,10 @@ cairo_surface_t*decoration_theme_t::get_button_surface(button_type_t button,
     // Lazy initialization: load GTK theme on first render
     load_gtk_theme();
 
-    /* Pixmap style: if the GTK theme ships metacity-1 titlebuttons, the asset
-     * is the complete button - background, colour and glyph - so it replaces
-     * the drawn circle and symbolic icon entirely. */
+    /* Unless the style is "gtk", use the theme's own buttons: a metacity-1
+     * titlebutton image is the complete button (background, colour and glyph),
+     * and so is a button its Metacity XML builds; either replaces the drawn
+     * circle and symbolic icon entirely. */
     const std::string style = button_style;
     if (style != "gtk")
     {

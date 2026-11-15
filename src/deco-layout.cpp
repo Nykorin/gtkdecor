@@ -1,7 +1,6 @@
 #include "deco-layout.hpp"
 #include "deco-theme.hpp"
 #include <wayfire/core.hpp>
-#include <wayfire/nonstd/reverse.hpp>
 #include <wayfire/nonstd/wlroots-full.hpp>
 #include <wayfire/util.hpp>
 #include <sstream>

@@ -33,10 +33,6 @@ class css_sheet_t
     using path_t = std::vector<node_t>;
 
     void parse(const std::string& css);
-    bool empty() const
-    {
-        return rules.empty();
-    }
 
     /** The cascaded value of @property for the last node of @path, unresolved */
     std::optional<std::string> value(const path_t& path, const std::string& property) const;
