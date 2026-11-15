@@ -128,7 +128,8 @@ border_size = 4
 # Draw the GTK theme's window shadow around windows
 shadow = true
 
-# Fallback settings (only used if GTK theme can't be loaded)
+# Fallbacks: the title bar colors and title color are used where the GTK
+# theme can't be loaded or gives none, the font where settings.ini names none
 font = sans-serif
 font_color = #ffffffff
 active_color = #222222aa

@@ -6,12 +6,12 @@
 		<category>Desktop</category>
 		<option name="font" type="string">
 			<_short>Fallback Font</_short>
-			<_long>Fallback font if GTK theme font cannot be determined. Normally uses your GTK font automatically.</_long>
+			<_long>Title font when ~/.config/gtk-3.0/settings.ini names none (gtk-font-name); drawn bold, at 11 pt unless the name gives a size. Normally uses your GTK font automatically.</_long>
 			<default>sans-serif</default>
 		</option>
 		<option name="font_color" type="color">
 			<_short>Fallback Font color</_short>
-			<_long>Fallback font color if GTK theme color cannot be determined. Normally uses your GTK theme color automatically.</_long>
+			<_long>Title and button color when the GTK theme can't be loaded or gives none. Normally uses your GTK theme color automatically.</_long>
 			<default>#ffffffff</default>
 		</option>
 		<option name="title_height" type="int">
@@ -48,7 +48,7 @@
 			<_long>Draw the GTK theme's window shadow (the box-shadow of its "decoration" style) around windows, as GTK does for its own windows. Tiled, maximized and fullscreen windows get none.</_long>
 			<default>true</default>
 		</option>
-		<!-- Fallback Colors (used if GTK theme cannot be loaded) -->
+		<!-- Fallback colors (used where the GTK theme can't be loaded or gives none) -->
 		<option name="active_color" type="color">
 			<_short>Fallback color when window is active</_short>
 			<_long>Fallback color when window is active. Normally uses your GTK theme color automatically.</_long>

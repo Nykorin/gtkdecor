@@ -29,6 +29,10 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
     wf::option_wrapper_t<std::string> button_order{"gtkdecor/button_order"};
     wf::option_wrapper_t<std::string> button_position{"gtkdecor/button_position"};
     wf::option_wrapper_t<bool> shadow{"gtkdecor/shadow"};
+    wf::option_wrapper_t<std::string> font{"gtkdecor/font"};
+    wf::option_wrapper_t<wf::color_t> font_color{"gtkdecor/font_color"};
+    wf::option_wrapper_t<wf::color_t> active_color{"gtkdecor/active_color"};
+    wf::option_wrapper_t<wf::color_t> inactive_color{"gtkdecor/inactive_color"};
 
     // GTK settings file monitoring
     int inotify_fd = -1;
@@ -211,6 +215,10 @@ class wayfire_gtkdecor : public wf::plugin_interface_t
         button_order.set_callback(on_config_changed);
         button_position.set_callback(on_config_changed);
         shadow.set_callback(on_config_changed);
+        font.set_callback(on_config_changed);
+        font_color.set_callback(on_config_changed);
+        active_color.set_callback(on_config_changed);
+        inactive_color.set_callback(on_config_changed);
 
         for (auto& view : wf::get_core().get_all_views())
         {

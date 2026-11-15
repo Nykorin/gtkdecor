@@ -667,6 +667,8 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     {
         bool valid = false;
         std::string path, content;
+        /* The parse starts from these and keeps them where the theme sets none */
+        wf::color_t fallback_active, fallback_inactive, fallback_font;
 
         std::map<std::string, std::string> css_colors;
         std::vector<css_shadow_t> shadow_active, shadow_inactive;
@@ -677,13 +679,20 @@ void decoration_theme_t::parse_theme_css(const std::string& css_file) const
     };
     static parsed_t cache;
 
-    if (!cache.valid || (cache.path != css_file) || (cache.content != css_content))
+    const wf::color_t fallback_active = active_color, fallback_inactive = inactive_color;
+    const wf::color_t fallback_font   = font_color;
+    if (!cache.valid || (cache.path != css_file) || (cache.content != css_content) ||
+        !(cache.fallback_active == fallback_active) || !(cache.fallback_inactive == fallback_inactive) ||
+        !(cache.fallback_font == fallback_font))
     {
         parse_theme_css_content(css_content);
         LOGI("Parsed GTK theme colors from: ", css_file);
 
         cache.path    = css_file;
         cache.content = std::move(css_content);
+        cache.fallback_active   = fallback_active;
+        cache.fallback_inactive = fallback_inactive;
+        cache.fallback_font     = fallback_font;
         cache.css_colors    = css_colors;
         cache.shadow_active = shadow_active;
         cache.shadow_inactive    = shadow_inactive;
@@ -1101,14 +1110,16 @@ decoration_theme_t::decoration_theme_t() :
 /**
  * The values a theme starts from, before its stylesheet is parsed. A new
  * theme object and a reload must start from the same ones: the stylesheet
- * cache in parse_theme_css() relies on it.
+ * cache in parse_theme_css() relies on it, and keys on the fallback colors.
  */
 void decoration_theme_t::reset_theme_values() const
 {
-    theme_titlebar_bg_active   = wf::color_t{0.1, 0.1, 0.15, 1.0};
-    theme_titlebar_bg_inactive = wf::color_t{0.15, 0.15, 0.2, 1.0};
-    theme_titlebar_fg_active   = wf::color_t{0.9, 0.9, 0.93, 1.0};
-    theme_titlebar_fg_inactive = wf::color_t{0.7, 0.7, 0.73, 0.7};
+    /* The fallback options: what stays when the theme can't be loaded, or
+     * gives no color of its own */
+    theme_titlebar_bg_active   = active_color;
+    theme_titlebar_bg_inactive = inactive_color;
+    theme_titlebar_fg_active   = font_color;
+    theme_titlebar_fg_inactive = font_color;
     corner_radius = 12;
     bottom_corner_radius = 8;
     theme_title_total    = 0;
@@ -1307,14 +1318,8 @@ void decoration_theme_t::render_background(const wf::scene::render_instruction_t
         }
     }
 
-    // Use theme colors if available, otherwise fall back to config colors
+    // The theme's colors, or the fallback options where it gives none
     wf::color_t bg_color = active ? theme_titlebar_bg_active : theme_titlebar_bg_inactive;
-
-    // If theme colors are still default (black), use config colors as ultimate fallback
-    if (bg_color.r == 0.0 && bg_color.g == 0.0 && bg_color.b == 0.0)
-    {
-        bg_color = active ? active_color : inactive_color;
-    }
 
     // Use a lighter semi-transparent border to contrast with dark backgrounds (like native GTK)
     wf::color_t outline_color;
@@ -1602,49 +1607,29 @@ cairo_surface_t*decoration_theme_t::render_text(const std::string& text,
     // Lazy initialization: load GTK theme to get font settings
     load_gtk_theme();
 
-    wf::color_t color = active ? theme_titlebar_fg_active : theme_titlebar_fg_inactive;
-    // Use config font color as fallback
-    if (color.r == 0.0 && color.g == 0.0 && color.b == 0.0)
-    {
-        color = font_color;
-    }
+    const wf::color_t color = active ? theme_titlebar_fg_active : theme_titlebar_fg_inactive;
 
     auto cr = cairo_create(surface);
 
     PangoFontDescription *font_desc;
     PangoLayout *layout;
 
-    // The GTK font, bold, as GTK draws window titles (.titlebar .title)
-    std::string gtk_font_now = get_gtk_font_name();
-    std::string font_to_use;
-
-    if (!gtk_font_now.empty())
+    /* The GTK font (settings.ini's gtk-font-name), or the font option when
+     * that names none; bold, as GTK draws window titles (.titlebar .title),
+     * at 11 pt when the name gives no size */
+    std::string font_name = get_gtk_font_name();
+    if (font_name.empty())
     {
-        // Parse the GTK font (format: "Font Name Weight Size")
-        size_t last_space = gtk_font_now.rfind(' ');
-        if (last_space != std::string::npos)
-        {
-            std::string font_family = gtk_font_now.substr(0, last_space);
-            std::string font_size_str = gtk_font_now.substr(last_space + 1);
-            try {
-                int size = std::stoi(font_size_str);
-                font_to_use = font_family + " Bold " + std::to_string(size);
-            } catch (...) {
-                font_to_use = gtk_font_now;  // Use as-is if parsing fails
-            }
-        }
-        else
-        {
-            font_to_use = gtk_font_now + " 11";
-        }
-    }
-    else
-    {
-        // Fallback if GTK font can't be read
-        font_to_use = "Sans 11";
+        font_name = font;
     }
 
-    font_desc = pango_font_description_from_string(font_to_use.c_str());
+    font_desc = pango_font_description_from_string(font_name.c_str());
+    if (pango_font_description_get_size(font_desc) <= 0)
+    {
+        pango_font_description_set_size(font_desc, 11 * PANGO_SCALE);
+    }
+
+    pango_font_description_set_weight(font_desc, PANGO_WEIGHT_BOLD);
 
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, font_desc);
@@ -1808,12 +1793,8 @@ cairo_surface_t*decoration_theme_t::get_button_surface(button_type_t button,
     // Draw icon when window is active or when button is hovered (like native GTK)
     if (show_icon)
     {
-        // Use theme text color for icon, with fallback
+        // The theme's title color (or the font_color option where it gives none)
         wf::color_t icon_color = theme_titlebar_fg_active;
-        if (icon_color.r == 0.0 && icon_color.g == 0.0 && icon_color.b == 0.0)
-        {
-            icon_color = font_color;  // Fallback to config color
-        }
 
         // Apply transparency based on hover state - semi-transparent by default, opaque on hover
         if (state.hover_progress > 0)
