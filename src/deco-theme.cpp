@@ -35,7 +35,8 @@ wf::color_t decoration_theme_t::parse_css_color(const std::string& color_str)
     }
 
     // Match hex color: #rrggbb or #rrggbbaa
-    std::regex hex_regex("#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?");
+    /* Compiled once: this runs for every colour a theme defines */
+    static const std::regex hex_regex("#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?");
     std::smatch hex_match;
     if (std::regex_search(color_str, hex_match, hex_regex))
     {
@@ -55,7 +56,7 @@ wf::color_t decoration_theme_t::parse_css_color(const std::string& color_str)
     }
 
     // Match rgba: rgba(r, g, b, a)
-    std::regex rgba_regex(R"(rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\))");
+    static const std::regex rgba_regex(R"(rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\))");
     std::smatch rgba_match;
     if (std::regex_search(color_str, rgba_match, rgba_regex))
     {
